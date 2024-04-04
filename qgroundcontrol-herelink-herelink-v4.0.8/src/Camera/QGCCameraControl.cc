@@ -11,6 +11,9 @@
 #include "VideoManager.h"
 #include "QGCMapEngine.h"
 #include "QGCCameraManager.h"
+#include "FTPManager.h"
+#include "QGCLZMA.h"
+#include "QGCCorePlugin.h"
 
 #include <QDir>
 #include <QStandardPaths>
@@ -154,7 +157,7 @@ read_value(QDomNode& element, const char* tagName, QString& target)
 
 //-----------------------------------------------------------------------------
 QGCCameraControl::QGCCameraControl(const mavlink_camera_information_t *info, Vehicle* vehicle, int compID, QObject* parent)
-    : FactGroup(0, parent)
+    : FactGroup(0, parent, true /* ignore camel case */)
     , _vehicle(vehicle)
     , _compID(compID)
 {
@@ -164,7 +167,7 @@ QGCCameraControl::QGCCameraControl(const mavlink_camera_information_t *info, Veh
     _vendor = QString(reinterpret_cast<const char*>(info->vendor_name));
     _modelName = QString(reinterpret_cast<const char*>(info->model_name));
     int ver = static_cast<int>(_info.cam_definition_version);
-    _cacheFile.sprintf("%s/%s_%s_%03d.xml",
+    _cacheFile = QString::asprintf("%s/%s_%s_%03d.xml",
         qgcApp()->toolbox()->settingsManager()->appSettings()->parameterSavePath().toStdString().c_str(),
         _vendor.toStdString().c_str(),
         _modelName.toStdString().c_str(),
@@ -184,6 +187,15 @@ QGCCameraControl::QGCCameraControl(const mavlink_camera_information_t *info, Veh
     _recTimer.setSingleShot(false);
     _recTimer.setInterval(333);
     connect(&_recTimer, &QTimer::timeout, this, &QGCCameraControl::_recTimerHandler);
+    //-- Tracking
+    if(_info.flags & CAMERA_CAP_FLAGS_HAS_TRACKING_RECTANGLE) {
+        _trackingStatus = static_cast<TrackingStatus>(_trackingStatus | TRACKING_RECTANGLE);
+        _trackingStatus = static_cast<TrackingStatus>(_trackingStatus | TRACKING_SUPPORTED);
+    }
+    if(_info.flags & CAMERA_CAP_FLAGS_HAS_TRACKING_POINT) {
+        _trackingStatus = static_cast<TrackingStatus>(_trackingStatus | TRACKING_POINT);
+        _trackingStatus = static_cast<TrackingStatus>(_trackingStatus | TRACKING_SUPPORTED);
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -228,9 +240,7 @@ QGCCameraControl::firmwareVersion()
     int major = (_info.firmware_version >> 24) & 0xFF;
     int minor = (_info.firmware_version >> 16) & 0xFF;
     int build = _info.firmware_version & 0xFFFF;
-    QString ver;
-    ver.sprintf("%d.%d.%d", major, minor, build);
-    return ver;
+    return QString::asprintf("%d.%d.%d", major, minor, build);
 }
 
 //-----------------------------------------------------------------------------
@@ -388,11 +398,8 @@ QGCCameraControl::takePhoto()
             _setPhotoStatus(PHOTO_CAPTURE_IN_PROGRESS);
             _captureInfoRetries = 0;
             //-- Capture local image as well
-            if(qgcApp()->toolbox()->videoManager()->videoReceiver()) {
-                QString photoPath = qgcApp()->toolbox()->settingsManager()->appSettings()->savePath()->rawValue().toString() + QStringLiteral("/Photo");
-                QDir().mkpath(photoPath);
-                photoPath += + "/" + QDateTime::currentDateTime().toString("yyyy-MM-dd_hh.mm.ss.zzz") + ".jpg";
-                qgcApp()->toolbox()->videoManager()->videoReceiver()->grabImage(photoPath);
+            if(qgcApp()->toolbox()->videoManager()) {
+                qgcApp()->toolbox()->videoManager()->grabImage();
             }
             return true;
         }
@@ -731,6 +738,10 @@ QGCCameraControl::_mavCommandResult(int vehicleId, int component, int command, i
                 qCDebug(CameraControlLog) << "Command failed for" << command;
             }
             switch(command) {
+                case MAV_CMD_RESET_CAMERA_SETTINGS:
+                    _resetting = false;
+                    qCDebug(CameraControlLog) << "Failed to reset camera settings";
+                break;
                 case MAV_CMD_IMAGE_START_CAPTURE:
                 case MAV_CMD_IMAGE_STOP_CAPTURE:
                     if(++_captureInfoRetries < 3) {
@@ -770,7 +781,7 @@ QGCCameraControl::_setVideoStatus(VideoStatus status)
         emit videoStatusChanged();
         if(status == VIDEO_CAPTURE_STATUS_RUNNING) {
              _recordTime = 0;
-             _recTime.start();
+             _recTime = QTime::currentTime();
              _recTimer.start();
         } else {
              _recTimer.stop();
@@ -784,7 +795,7 @@ QGCCameraControl::_setVideoStatus(VideoStatus status)
 void
 QGCCameraControl::_recTimerHandler()
 {
-    _recordTime = static_cast<uint32_t>(_recTime.elapsed());
+    _recordTime = static_cast<uint32_t>(_recTime.msecsTo(QTime::currentTime()));
     emit recordTimeChanged();
 }
 
@@ -812,20 +823,24 @@ QGCCameraControl::_loadCameraDefinitionFile(QByteArray& bytes)
     QString errorMsg;
     QDomDocument doc;
     if(!doc.setContent(bytes, false, &errorMsg, &errorLine)) {
-        qCritical() << "Unable to parse camera definition file on line:" << errorLine;
-        qCritical() << errorMsg;
+        qCCritical(CameraControlLog) << "Unable to parse camera definition file on line:" << errorLine;
+        qCCritical(CameraControlLog) << errorMsg;
         return false;
     }
     //-- Load camera constants
     QDomNodeList defElements = doc.elementsByTagName(kDefnition);
     if(!defElements.size() || !_loadConstants(defElements)) {
-        qWarning() <<  "Unable to load camera constants from camera definition";
+        qCWarning(CameraControlLog) <<  "Unable to load camera constants from camera definition";
         return false;
     }
     //-- Load camera parameters
     QDomNodeList paramElements = doc.elementsByTagName(kParameters);
-    if(!paramElements.size() || !_loadSettings(paramElements)) {
-        qWarning() <<  "Unable to load camera parameters from camera definition";
+    if(!paramElements.size()) {
+        qCDebug(CameraControlLog) <<  "No parameters to load from camera";
+        return false;
+    }
+    if(!_loadSettings(paramElements)) {
+        qCWarning(CameraControlLog) <<  "Unable to load camera parameters from camera definition";
         return false;
     }
     //-- If this is new, cache it
@@ -1176,16 +1191,21 @@ QGCCameraControl::_requestAllParameters()
             qCritical() << "QGCParamIO is NULL" << paramName;
         }
     }
-    MAVLinkProtocol* mavlink = qgcApp()->toolbox()->mavlinkProtocol();
-    mavlink_message_t msg;
-    mavlink_msg_param_ext_request_list_pack_chan(
-        static_cast<uint8_t>(mavlink->getSystemId()),
-        static_cast<uint8_t>(mavlink->getComponentId()),
-        _vehicle->priorityLink()->mavlinkChannel(),
-        &msg,
-        static_cast<uint8_t>(_vehicle->id()),
-        static_cast<uint8_t>(compID()));
-    _vehicle->sendMessageOnLink(_vehicle->priorityLink(), msg);
+    WeakLinkInterfacePtr weakLink = _vehicle->vehicleLinkManager()->primaryLink();
+    if (!weakLink.expired()) {
+        SharedLinkInterfacePtr sharedLink = weakLink.lock();
+
+        MAVLinkProtocol* mavlink = qgcApp()->toolbox()->mavlinkProtocol();
+        mavlink_message_t msg;
+        mavlink_msg_param_ext_request_list_pack_chan(
+                    static_cast<uint8_t>(mavlink->getSystemId()),
+                    static_cast<uint8_t>(mavlink->getComponentId()),
+                    sharedLink->mavlinkChannel(),
+                    &msg,
+                    static_cast<uint8_t>(_vehicle->id()),
+                    static_cast<uint8_t>(compID()));
+        _vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), msg);
+    }
     qCDebug(CameraControlVerboseLog) << "Request all parameters";
 }
 
@@ -1276,17 +1296,22 @@ QGCCameraControl::_processConditionTest(const QString conditionTest)
     qCDebug(CameraControlVerboseLog) << "_processConditionTest(" << conditionTest << ")";
     int op = TEST_NONE;
     QStringList test;
+
+    auto split = [&conditionTest](const QString& sep ) {
+        return conditionTest.split(sep, Qt::SkipEmptyParts);
+    };
+
     if(conditionTest.contains("!=")) {
-        test = conditionTest.split("!=", QString::SkipEmptyParts);
+        test = split("!=");
         op = TEST_NOT_EQUAL;
     } else if(conditionTest.contains("=")) {
-        test = conditionTest.split("=", QString::SkipEmptyParts);
+        test = split("=");
         op = TEST_EQUAL;
     } else if(conditionTest.contains(">")) {
-        test = conditionTest.split(">", QString::SkipEmptyParts);
+        test = split(">");
         op = TEST_GREATER;
     } else if(conditionTest.contains("<")) {
-        test = conditionTest.split("<", QString::SkipEmptyParts);
+        test = split("<");
         op = TEST_SMALLER;
     }
     if(test.size() == 2) {
@@ -1321,7 +1346,7 @@ QGCCameraControl::_processCondition(const QString condition)
     bool result = true;
     bool andOp  = true;
     if(!condition.isEmpty()) {
-        QStringList scond = condition.split(" ", QString::SkipEmptyParts);
+        QStringList scond = condition.split(" ", Qt::SkipEmptyParts);
         while(scond.size()) {
             QString test = scond.first();
             scond.removeFirst();
@@ -1480,7 +1505,7 @@ void
 QGCCameraControl::handleStorageInfo(const mavlink_storage_information_t& st)
 {
     qCDebug(CameraControlLog) << "handleStorageInfo:" << st.available_capacity << st.status << st.storage_count << st.storage_id << st.total_capacity << st.used_capacity;
-    if(st.status == 0) {
+    if(st.status == STORAGE_STATUS_READY) {
         uint32_t t = static_cast<uint32_t>(st.total_capacity);
         if(_storageTotal != t) {
             _storageTotal = t;
@@ -1523,8 +1548,9 @@ QGCCameraControl::handleCaptureStatus(const mavlink_camera_capture_status_t& cap
     }
     //-- Do we have recording time?
     if(cap.recording_time_ms) {
+        // Resync our _recTime timer to the time info received from the camera component
         _recordTime = cap.recording_time_ms;
-        _recTime = _recTime.addMSecs(_recTime.elapsed() - static_cast<int>(cap.recording_time_ms));
+        _recTime = _recTime.addMSecs(_recTime.msecsTo(QTime::currentTime()) - static_cast<int>(cap.recording_time_ms));
         emit recordTimeChanged();
     }
     //-- Video/Image Capture Status
@@ -1542,11 +1568,11 @@ QGCCameraControl::handleCaptureStatus(const mavlink_camera_capture_status_t& cap
     //-- Time Lapse
     if(photoStatus() == PHOTO_CAPTURE_INTERVAL_IDLE || photoStatus() == PHOTO_CAPTURE_INTERVAL_IN_PROGRESS) {
         //-- Capture local image as well
-        if(qgcApp()->toolbox()->videoManager()->videoReceiver()) {
+        if(qgcApp()->toolbox()->videoManager()) {
             QString photoPath = qgcApp()->toolbox()->settingsManager()->appSettings()->savePath()->rawValue().toString() + QStringLiteral("/Photo");
             QDir().mkpath(photoPath);
             photoPath += + "/" + QDateTime::currentDateTime().toString("yyyy-MM-dd_hh.mm.ss.zzz") + ".jpg";
-            qgcApp()->toolbox()->videoManager()->videoReceiver()->grabImage(photoPath);
+            qgcApp()->toolbox()->videoManager()->grabImage(photoPath);
         }
     }
 }
@@ -1555,15 +1581,16 @@ QGCCameraControl::handleCaptureStatus(const mavlink_camera_capture_status_t& cap
 void
 QGCCameraControl::handleVideoInfo(const mavlink_video_stream_information_t* vi)
 {
-    qCDebug(CameraControlLog) << "handleVideoInfo:" << vi->camera_id << vi->uri;
-    _expectedCount = 2;
-    if(!_findStream(vi->camera_id, false)) {
-        qCDebug(CameraControlLog) << "Create stream handler for stream ID:" << vi->camera_id;
+    qCDebug(CameraControlLog) << "handleVideoInfo:" << vi->stream_id << vi->uri;
+    _expectedCount = vi->count;
+    if(!_findStream(vi->stream_id, false)) {
+        qCDebug(CameraControlLog) << "Create stream handler for stream ID:" << vi->stream_id;
         QGCVideoStreamInfo* pStream = new QGCVideoStreamInfo(this, vi);
         QQmlEngine::setObjectOwnership(pStream, QQmlEngine::CppOwnership);
         _streams.append(pStream);
         //-- Thermal is handled separately and not listed
         if(!pStream->isThermal()) {
+            _streamLabels.append(pStream->name());
             emit streamsChanged();
             emit streamLabelsChanged();
         } else {
@@ -1578,7 +1605,7 @@ QGCCameraControl::handleVideoInfo(const mavlink_video_stream_information_t* vi)
         qCDebug(CameraControlLog) << "All stream handlers done";
         _streamInfoTimer.stop();
         emit autoStreamChanged();
-        emit _vehicle->dynamicCameras()->streamChanged();
+        emit _vehicle->cameraManager()->streamChanged();
     }
 }
 
@@ -1591,6 +1618,45 @@ QGCCameraControl::handleVideoStatus(const mavlink_video_stream_status_t* vs)
     QGCVideoStreamInfo* pInfo = _findStream(vs->stream_id);
     if(pInfo) {
         pInfo->update(vs);
+    }
+}
+
+//-----------------------------------------------------------------------------
+void
+QGCCameraControl::handleTrackingImageStatus(const mavlink_camera_tracking_image_status_t *tis)
+{
+    if (tis) {
+        _trackingImageStatus = *tis;
+
+        if (_trackingImageStatus.tracking_status == 0 || !trackingEnabled()) {
+            _trackingImageRect = {};
+            qCDebug(CameraControlLog) << "Tracking off";
+        } else {
+            if (_trackingImageStatus.tracking_mode == 2) {
+                _trackingImageRect = QRectF(QPointF(_trackingImageStatus.rec_top_x, _trackingImageStatus.rec_top_y),
+                                            QPointF(_trackingImageStatus.rec_bottom_x, _trackingImageStatus.rec_bottom_y));
+            } else {
+                float r = _trackingImageStatus.radius;
+                if (qIsNaN(r) || r <= 0 ) {
+                    r = 0.05f;
+                }
+                // Bottom is NAN so that we can draw perfect square using video aspect ratio
+                _trackingImageRect = QRectF(QPointF(_trackingImageStatus.point_x - r, _trackingImageStatus.point_y - r),
+                                            QPointF(_trackingImageStatus.point_x + r, NAN));
+            }
+            // get rectangle into [0..1] boundaries
+            _trackingImageRect.setLeft(std::min(std::max(_trackingImageRect.left(), 0.0), 1.0));
+            _trackingImageRect.setTop(std::min(std::max(_trackingImageRect.top(), 0.0), 1.0));
+            _trackingImageRect.setRight(std::min(std::max(_trackingImageRect.right(), 0.0), 1.0));
+            _trackingImageRect.setBottom(std::min(std::max(_trackingImageRect.bottom(), 0.0), 1.0));
+
+            qCDebug(CameraControlLog) << "Tracking Image Status [left:" << _trackingImageRect.left()
+                                      << "top:" << _trackingImageRect.top()
+                                      << "right:" << _trackingImageRect.right()
+                                      << "bottom:" << _trackingImageRect.bottom() << "]";
+        }
+
+        emit trackingImageStatusChanged();
     }
 }
 
@@ -1624,7 +1690,7 @@ QGCCameraControl::setCurrentStream(int stream)
                 _requestStreamStatus(static_cast<uint8_t>(pInfo->streamID()));
             }
             emit currentStreamChanged();
-            emit _vehicle->dynamicCameras()->streamChanged();
+            emit _vehicle->cameraManager()->streamChanged();
         }
     }
 }
@@ -1749,16 +1815,16 @@ QGCCameraControl::_findStream(uint8_t id, bool report)
 QGCVideoStreamInfo*
 QGCCameraControl::_findStream(const QString name)
 {
-//    for(int i = 0; i < _streams.count(); i++) {
-//        if(_streams[i]) {
-//            QGCVideoStreamInfo* pStream = qobject_cast<QGCVideoStreamInfo*>(_streams[i]);
-//            if(pStream) {
-//                if(pStream->name() == name) {
-//                    return pStream;
-//                }
-//            }
-//        }
-//    }
+    for(int i = 0; i < _streams.count(); i++) {
+        if(_streams[i]) {
+            QGCVideoStreamInfo* pStream = qobject_cast<QGCVideoStreamInfo*>(_streams[i]);
+            if(pStream) {
+                if(pStream->name() == name) {
+                    return pStream;
+                }
+            }
+        }
+    }
     return nullptr;
 }
 
@@ -1774,7 +1840,7 @@ QGCCameraControl::_streamTimeout()
         //-- If we have at least one stream, work with what we have.
         if(_streams.count()) {
             emit autoStreamChanged();
-            emit _vehicle->dynamicCameras()->streamChanged();
+            emit _vehicle->cameraManager()->streamChanged();
         }
         return;
     }
@@ -1943,8 +2009,28 @@ QGCCameraControl::_handleDefinitionFile(const QString &url)
 {
     //-- First check and see if we have it cached
     QFile xmlFile(_cacheFile);
+
+    QString ftpPrefix(QStringLiteral("%1://").arg(FTPManager::mavlinkFTPScheme));
+    if (!xmlFile.exists() && url.startsWith(ftpPrefix, Qt::CaseInsensitive)) {
+        qCDebug(CameraControlLog) << "No camera definition file cached, attempt ftp download";
+        int ver = static_cast<int>(_info.cam_definition_version);
+        QString ext = "";
+        if (url.endsWith(".lzma", Qt::CaseInsensitive)) { ext = ".lzma"; }
+        if (url.endsWith(".xz", Qt::CaseInsensitive)) { ext = ".xz"; }
+        QString fileName = QString::asprintf("%s_%s_%03d.xml%s",
+            _vendor.toStdString().c_str(),
+            _modelName.toStdString().c_str(),
+            ver,
+            ext.toStdString().c_str());
+        connect(_vehicle->ftpManager(), &FTPManager::downloadComplete, this, &QGCCameraControl::_ftpDownloadComplete);
+        _vehicle->ftpManager()->download(_compID, url,
+            qgcApp()->toolbox()->settingsManager()->appSettings()->parameterSavePath().toStdString().c_str(),
+            fileName);
+        return;
+    }
+
     if (!xmlFile.exists()) {
-        qCDebug(CameraControlLog) << "No camera definition file cached";
+        qCDebug(CameraControlLog) << "No camera definition file cached, attempt http download";
         _httpRequest(url);
         return;
     }
@@ -1979,7 +2065,7 @@ QGCCameraControl::_httpRequest(const QString &url)
     tempProxy.setType(QNetworkProxy::DefaultProxy);
     _netManager->setProxy(tempProxy);
     QNetworkRequest request(url);
-    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, true);
     QSslConfiguration conf = request.sslConfiguration();
     conf.setPeerVerifyMode(QSslSocket::VerifyNone);
     request.setSslConfiguration(conf);
@@ -2003,10 +2089,48 @@ QGCCameraControl::_downloadFinished()
         data.append("\n");
     } else {
         data.clear();
-        qWarning() << QString("Camera Definition download error: %1 status: %2").arg(reply->errorString(), reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toString());
+        qWarning() << QString("Camera Definition (%1) download error: %2 status: %3").arg(
+            reply->url().toDisplayString(),
+            reply->errorString(),
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toString()
+        );
     }
     emit dataReady(data);
     //reply->deleteLater();
+}
+
+void QGCCameraControl::_ftpDownloadComplete(const QString& fileName, const QString& errorMsg)
+{
+    qCDebug(CameraControlLog) << "FTP Download completed: " << fileName << ", " << errorMsg;
+
+    disconnect(_vehicle->ftpManager(), &FTPManager::downloadComplete, this, &QGCCameraControl::_ftpDownloadComplete);
+
+    QString outputFileName = fileName;
+
+    if (fileName.endsWith(".lzma", Qt::CaseInsensitive) || fileName.endsWith(".xz", Qt::CaseInsensitive)) {
+        outputFileName = fileName.left(fileName.lastIndexOf("."));
+        if (QGCLZMA::inflateLZMAFile(fileName, outputFileName)) {
+            QFile(fileName).remove();
+        } else {
+            qCWarning(CameraControlLog) << "Inflate of compressed xml failed" << fileName;
+            outputFileName.clear();
+        }
+    }
+
+    QFile xmlFile(outputFileName);
+
+    if (!xmlFile.exists()) {
+        qCDebug(CameraControlLog) << "No camera definition file present after ftp download completed";
+        return;
+    }
+    if (!xmlFile.open(QIODevice::ReadOnly)) {
+        qWarning() << "Could not read downloaded camera definition file: " << fileName;
+        return;
+    }
+
+    _cached = true;
+    QByteArray bytes = xmlFile.readAll();
+    emit dataReady(bytes);
 }
 
 //-----------------------------------------------------------------------------
@@ -2017,7 +2141,19 @@ QGCCameraControl::_dataReady(QByteArray data)
         qCDebug(CameraControlLog) << "Parsing camera definition";
         _loadCameraDefinitionFile(data);
     } else {
-        qCDebug(CameraControlLog) << "No camera definition";
+        qCDebug(CameraControlLog) << "No camera definition received, trying to search on our own...";
+        QFile definitionFile;
+        if(qgcApp()->toolbox()->corePlugin()->getOfflineCameraDefinitionFile(_modelName, definitionFile)) {
+            qCDebug(CameraControlLog) << "Found offline definition file for: " << _modelName << ", loading: " << definitionFile.fileName();
+            if (definitionFile.open(QIODevice::ReadOnly)) {
+                QByteArray newData = definitionFile.readAll();
+                _loadCameraDefinitionFile(newData);
+            } else {
+                qCDebug(CameraControlLog) << "error opening offline definition file for: " << _modelName;
+            }
+        } else {
+            qCDebug(CameraControlLog) << "No offline camera definition file found";
+        }
     }
     _initWhenReady();
 }
@@ -2043,16 +2179,13 @@ void
 QGCCameraControl::_checkForVideoStreams()
 {
     if(_info.flags & CAMERA_CAP_FLAGS_HAS_VIDEO_STREAM) {
-        //-- Skip it if using Taisync as it has its own video settings
-        if(!qgcApp()->toolbox()->videoManager()->isTaisync()) {
-            connect(&_streamInfoTimer, &QTimer::timeout, this, &QGCCameraControl::_streamTimeout);
-            _streamInfoTimer.setSingleShot(false);
-            connect(&_streamStatusTimer, &QTimer::timeout, this, &QGCCameraControl::_streamStatusTimeout);
-            _streamStatusTimer.setSingleShot(true);
-            //-- Request all streams
-            _requestStreamInfo(0);
-            _streamInfoTimer.start(2000);
-        }
+        connect(&_streamInfoTimer, &QTimer::timeout, this, &QGCCameraControl::_streamTimeout);
+        _streamInfoTimer.setSingleShot(false);
+        connect(&_streamStatusTimer, &QTimer::timeout, this, &QGCCameraControl::_streamStatusTimeout);
+        _streamStatusTimer.setSingleShot(true);
+        //-- Request all streams
+        _requestStreamInfo(0);
+        _streamInfoTimer.start(2000);
     }
 }
 
@@ -2128,7 +2261,7 @@ QGCCameraControl::wb()
 Fact*
 QGCCameraControl::mode()
 {
-    return _paramComplete ? getFact(kCAM_MODE) : nullptr;
+    return _paramComplete && factExists(kCAM_MODE) ? getFact(kCAM_MODE) : nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -2140,7 +2273,7 @@ QGCVideoStreamInfo::QGCVideoStreamInfo(QObject* parent, const mavlink_video_stre
 
 //-----------------------------------------------------------------------------
 qreal
-QGCVideoStreamInfo::aspectRatio()
+QGCVideoStreamInfo::aspectRatio() const
 {
     qreal ar = 1.0;
     if(_streamInfo.resolution_h && _streamInfo.resolution_v) {
@@ -2154,6 +2287,14 @@ bool
 QGCVideoStreamInfo::update(const mavlink_video_stream_status_t* vs)
 {
     bool changed = false;
+    if(_streamInfo.hfov != vs->hfov) {
+        changed = true;
+        _streamInfo.hfov = vs->hfov;
+    }
+    if(_streamInfo.flags != vs->flags) {
+        changed = true;
+        _streamInfo.flags = vs->flags;
+    }
     if(_streamInfo.bitrate != vs->bitrate) {
         changed = true;
         _streamInfo.bitrate = vs->bitrate;
@@ -2161,6 +2302,10 @@ QGCVideoStreamInfo::update(const mavlink_video_stream_status_t* vs)
     if(_streamInfo.rotation != vs->rotation) {
         changed = true;
         _streamInfo.rotation = vs->rotation;
+    }
+    if(_streamInfo.framerate != vs->framerate) {
+        changed = true;
+        _streamInfo.framerate = vs->framerate;
     }
     if(_streamInfo.resolution_h != vs->resolution_h) {
         changed = true;
@@ -2174,4 +2319,94 @@ QGCVideoStreamInfo::update(const mavlink_video_stream_status_t* vs)
         emit infoChanged();
     }
     return changed;
+}
+
+//-----------------------------------------------------------------------------
+void
+QGCCameraControl::setTrackingEnabled(bool set)
+{
+    if(set) {
+        _trackingStatus = static_cast<TrackingStatus>(_trackingStatus | TRACKING_ENABLED);
+    } else {
+        _trackingStatus = static_cast<TrackingStatus>(_trackingStatus & ~TRACKING_ENABLED);
+    }
+    emit trackingEnabledChanged();
+}
+
+//-----------------------------------------------------------------------------
+void
+QGCCameraControl::startTracking(QRectF rec)
+{
+    if(_trackingMarquee != rec) {
+        _trackingMarquee = rec;
+
+        qCDebug(CameraControlLog) << "Start Tracking (Rectangle: ["
+                                  << static_cast<float>(rec.x()) << ", "
+                                  << static_cast<float>(rec.y()) << "] - ["
+                                  << static_cast<float>(rec.x() + rec.width()) << ", "
+                                  << static_cast<float>(rec.y() + rec.height()) << "]";
+
+        _vehicle->sendMavCommand(_compID,
+                                 MAV_CMD_CAMERA_TRACK_RECTANGLE,
+                                 true,
+                                 static_cast<float>(rec.x()),
+                                 static_cast<float>(rec.y()),
+                                 static_cast<float>(rec.x() + rec.width()),
+                                 static_cast<float>(rec.y() + rec.height()));
+    }
+}
+
+//-----------------------------------------------------------------------------
+void
+QGCCameraControl::startTracking(QPointF point, double radius)
+{
+    if(_trackingPoint != point || _trackingRadius != radius) {
+        _trackingPoint  = point;
+        _trackingRadius = radius;
+
+        qCDebug(CameraControlLog) << "Start Tracking (Point: ["
+                                  << static_cast<float>(point.x()) << ", "
+                                  << static_cast<float>(point.y()) << "], Radius:  "
+                                  << static_cast<float>(radius);
+
+        _vehicle->sendMavCommand(_compID,
+                                 MAV_CMD_CAMERA_TRACK_POINT,
+                                 true,
+                                 static_cast<float>(point.x()),
+                                 static_cast<float>(point.y()),
+                                 static_cast<float>(radius));
+    }
+}
+
+//-----------------------------------------------------------------------------
+void
+QGCCameraControl::stopTracking()
+{
+    qCDebug(CameraControlLog) << "Stop Tracking";
+
+    //-- Stop Tracking
+    _vehicle->sendMavCommand(_compID,
+                             MAV_CMD_CAMERA_STOP_TRACKING,
+                             true);
+
+    //-- Stop Sending Tracking Status
+    _vehicle->sendMavCommand(_compID,
+                             MAV_CMD_SET_MESSAGE_INTERVAL,
+                             true,
+                             MAVLINK_MSG_ID_CAMERA_TRACKING_IMAGE_STATUS,
+                             -1);
+
+    // reset tracking image rectangle
+    _trackingImageRect = {};
+}
+
+//-----------------------------------------------------------------------------
+void
+QGCCameraControl::_requestTrackingStatus()
+{
+    _vehicle->sendMavCommand(_compID,
+                             MAV_CMD_SET_MESSAGE_INTERVAL,
+                             true,
+                             MAVLINK_MSG_ID_CAMERA_TRACKING_IMAGE_STATUS,
+                             500000); // Interval (us)
 }

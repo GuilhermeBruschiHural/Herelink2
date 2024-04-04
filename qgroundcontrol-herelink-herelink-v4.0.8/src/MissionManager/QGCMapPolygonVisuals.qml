@@ -7,19 +7,20 @@
  *
  ****************************************************************************/
 
-import QtQuick                          2.11
-import QtQuick.Controls                 2.4
-import QtLocation                       5.3
-import QtPositioning                    5.3
-import QtQuick.Dialogs                  1.2
-import QtQuick.Layouts                  1.11
+import QtQuick
+import QtQuick.Controls
+import QtLocation
+import QtPositioning
+import QtQuick.Dialogs
+import QtQuick.Layouts
 
-import QGroundControl                   1.0
-import QGroundControl.ScreenTools       1.0
-import QGroundControl.Palette           1.0
-import QGroundControl.Controls          1.0
-import QGroundControl.FlightMap         1.0
-import QGroundControl.ShapeFileHelper   1.0
+import QGroundControl
+import QGroundControl.ScreenTools
+import QGroundControl.Palette
+import QGroundControl.Controls
+import QGroundControl.FlightMap
+import QGroundControl.ShapeFileHelper
+import GlobalSignals 1.0 
 
 /// QGCMapPolygon map visuals
 Item {
@@ -29,6 +30,7 @@ Item {
     property var    mapPolygon                                  ///< QGCMapPolygon object
     property bool   interactive:        mapPolygon.interactive
     property color  interiorColor:      "transparent"
+    property color  altColor:           "transparent"
     property real   interiorOpacity:    1
     property int    borderWidth:        0
     property color  borderColor:        "black"
@@ -41,13 +43,14 @@ Item {
     property string _instructionText:           _polygonToolsText
     property var    _savedVertices:             [ ]
     property bool   _savedCircleMode
+    property bool   _isVertexBeingDragged:      false
 
     property real _zorderDragHandle:    QGroundControl.zOrderMapItems + 3   // Highest to prevent splitting when items overlap
     property real _zorderSplitHandle:   QGroundControl.zOrderMapItems + 2
     property real _zorderCenterHandle:  QGroundControl.zOrderMapItems + 1   // Lowest such that drag or split takes precedence
 
-    readonly property string _polygonToolsText: qsTr("Polygon Tools")
-    readonly property string _traceText:        qsTr("Click in the map to add vertices. Click 'Done Tracing' when finished.")
+    readonly property string _polygonToolsText: qsTr("Inicie")
+    readonly property string _traceText:        qsTr("Finalize")
 
     function addCommonVisuals() {
         if (_objMgrCommonVisuals.empty) {
@@ -61,7 +64,10 @@ Item {
 
     function addEditingVisuals() {
         if (_objMgrEditingVisuals.empty) {
-            _objMgrEditingVisuals.createObjects([ dragHandlesComponent, splitHandlesComponent, centerDragHandleComponent ], mapControl, false /* addToMap */)
+            _objMgrEditingVisuals.createObjects(
+                [ dragHandlesComponent, splitHandlesComponent, centerDragHandleComponent, edgeLengthHandlesComponent ], 
+                mapControl, 
+                false /* addToMap */)
         }
     }
 
@@ -69,10 +75,10 @@ Item {
         _objMgrEditingVisuals.destroyObjects()
     }
 
-
     function addToolbarVisuals() {
         if (_objMgrToolVisuals.empty) {
-            _objMgrToolVisuals.createObject(toolbarComponent, mapControl)
+            var toolbar = _objMgrToolVisuals.createObject(toolbarComponent, mapControl)
+            toolbar.z = QGroundControl.zOrderWidgets
         }
     }
 
@@ -109,17 +115,14 @@ Item {
         bottomLeftCoord =   centerCoord.atDistanceAndAzimuth(halfWidthMeters, -90).atDistanceAndAzimuth(halfHeightMeters, 180)
         bottomRightCoord =  centerCoord.atDistanceAndAzimuth(halfWidthMeters, 90).atDistanceAndAzimuth(halfHeightMeters, 180)
 
-        return [ topLeftCoord, topRightCoord, bottomRightCoord, bottomLeftCoord, centerCoord  ]
+        return [ topLeftCoord, topRightCoord, bottomRightCoord, bottomLeftCoord  ]
     }
 
     /// Reset polygon back to initial default
     function _resetPolygon() {
         mapPolygon.beginReset()
         mapPolygon.clear()
-        var initialVertices = defaultPolygonVertices()
-        for (var i=0; i<4; i++) {
-            mapPolygon.appendVertex(initialVertices[i])
-        }
+        mapPolygon.appendVertices(defaultPolygonVertices())
         mapPolygon.endReset()
         _circleMode = false
     }
@@ -147,7 +150,7 @@ Item {
         var width = initialVertices[0].distanceTo(initialVertices[1])
         var height = initialVertices[1].distanceTo(initialVertices[2])
         var radius = Math.min(width, height) / 2
-        var center = initialVertices[4]
+        var center = initialVertices[0].atDistanceAndAzimuth(width / 2, 90).atDistanceAndAzimuth(height / 2, 180)
         _createCircularPolygon(center, radius)
     }
 
@@ -220,9 +223,8 @@ Item {
     KMLOrSHPFileDialog {
         id:             kmlOrSHPLoadDialog
         title:          qsTr("Select Polygon File")
-        selectExisting: true
 
-        onAcceptedForLoad: {
+        onAcceptedForLoad: (file) => {
             mapPolygon.loadKMLOrSHPFile(file)
             mapFitFunctions.fitMapViewportToMissionItems()
             close()
@@ -268,13 +270,13 @@ Item {
         QGCMenuItem {
             text:           qsTr("Edit position..." )
             visible:        _circleMode
-            onTriggered:    mainWindow.showComponentDialog(editCenterPositionDialog, qsTr("Edit Center Position"), mainWindow.showDialogDefaultWidth, StandardButton.Close)
+            onTriggered:    editCenterPositionDialog.createObject(mainWindow).open()
         }
 
         QGCMenuItem {
             text:           qsTr("Edit position..." )
             visible:        !_circleMode && menu._editingVertexIndex >= 0
-            onTriggered:    mainWindow.showComponentDialog(editVertexPositionDialog, qsTr("Edit Vertex Position"), mainWindow.showDialogDefaultWidth, StandardButton.Close)
+            onTriggered:    editVertexPositionDialog.createObject(mainWindow).open()
         }
     }
 
@@ -282,11 +284,70 @@ Item {
         id: polygonComponent
 
         MapPolygon {
-            color:          interiorColor
+            color:          mapPolygon.showAltColor ? altColor : interiorColor
             opacity:        interiorOpacity
             border.color:   borderColor
             border.width:   borderWidth
             path:           mapPolygon.path
+        }
+    }
+
+    Component {
+        id: edgeLengthHandleComponent
+
+        MapQuickItem {
+            id:             mapQuickItem
+            anchorPoint.x:  sourceItem.width / 2
+            anchorPoint.y:  sourceItem.height / 2
+            visible:        !_circleMode
+
+            property int vertexIndex
+            property real distance
+
+            property var _unitsConversion: QGroundControl.unitsConversion
+
+            sourceItem: Text {
+              text:     _unitsConversion.metersToAppSettingsHorizontalDistanceUnits(distance).toFixed(1) + " " +
+                        _unitsConversion.appSettingsHorizontalDistanceUnitsString
+              color:    "white"
+            }
+        }
+    }
+
+    Component {
+        id: edgeLengthHandlesComponent
+
+        Repeater {
+            model: _isVertexBeingDragged ? mapPolygon.path : undefined
+
+            delegate: Item {
+                property var _edgeLengthHandle
+                property var _vertices:     mapPolygon.path
+
+                function _setHandlePosition() {
+                    var nextIndex = index + 1
+                    if (nextIndex > _vertices.length - 1) {
+                        nextIndex = 0
+                    }
+                    var distance = _vertices[index].distanceTo(_vertices[nextIndex])
+                    var azimuth = _vertices[index].azimuthTo(_vertices[nextIndex])
+                    _edgeLengthHandle.coordinate =_vertices[index].atDistanceAndAzimuth(distance / 3, azimuth)
+                    _edgeLengthHandle.distance = distance
+                }
+
+                Component.onCompleted: {
+                    _edgeLengthHandle = edgeLengthHandleComponent.createObject(mapControl)
+                    _edgeLengthHandle.vertexIndex = index
+                    _setHandlePosition()
+                    mapControl.addMapItem(_edgeLengthHandle)
+                }
+
+                Component.onDestruction: {
+                    if (_edgeLengthHandle) {
+                        _edgeLengthHandle.destroy()
+                    }
+                }
+            }
         }
     }
 
@@ -303,7 +364,7 @@ Item {
 
             sourceItem: SplitIndicator {
                 z:          _zorderSplitHandle
-                onClicked:  mapPolygon.splitPolygonSegment(mapQuickItem.vertexIndex)
+                onClicked:  if(_root.interactive) mapPolygon.splitPolygonSegment(mapQuickItem.vertexIndex)
             }
         }
     }
@@ -349,11 +410,12 @@ Item {
         id: dragAreaComponent
 
         MissionItemIndicatorDrag {
-            id:         dragArea
-            mapControl: _root.mapControl
-            z:          _zorderDragHandle
-            visible:    !_circleMode
-            onDragStop: mapPolygon.verifyClockwiseWinding()
+            id:             dragArea
+            mapControl:     _root.mapControl
+            z:              _zorderDragHandle
+            visible:        !_circleMode
+            onDragStart:    _isVertexBeingDragged = true
+            onDragStop:     { _isVertexBeingDragged = false; mapPolygon.verifyClockwiseWinding() }
 
             property int polygonVertex
 
@@ -368,7 +430,7 @@ Item {
                 }
             }
 
-            onClicked: menu.popupVertex(polygonVertex)
+            onClicked: if(_root.interactive) menu.popupVertex(polygonVertex)
         }
     }
 
@@ -460,6 +522,7 @@ Item {
         id: editCenterPositionDialog
 
         EditPositionDialog {
+            title:      qsTr("Edit Center Position")
             coordinate: mapPolygon.center
             onCoordinateChanged: {
                 // Prevent spamming signals on vertex changes by setting centerDrag = true when changing center position.
@@ -475,7 +538,8 @@ Item {
         id: editVertexPositionDialog
 
         EditPositionDialog {
-            coordinate:             mapPolygon.vertexCoordinate(menu._editingVertexIndex)
+            title:      qsTr("Edit Vertex Position")
+            coordinate: mapPolygon.vertexCoordinate(menu._editingVertexIndex)
             onCoordinateChanged: {
                 mapPolygon.adjustVertex(menu._editingVertexIndex, coordinate)
                 mapPolygon.verifyClockwiseWinding()
@@ -523,38 +587,47 @@ Item {
             anchors.horizontalCenter:       mapControl.left
             anchors.horizontalCenterOffset: mapControl.centerViewport.left + (mapControl.centerViewport.width / 2)
             y:                              mapControl.centerViewport.top
-            z:                              QGroundControl.zOrderMapItems + 2
             availableWidth:                 mapControl.centerViewport.width
 
             QGCButton {
                 _horizontalPadding: 0
                 text:               qsTr("Basic")
-                visible:            !mapPolygon.traceMode
+                //visible:            !mapPolygon.traceMode
+                visible: false
                 onClicked:          _resetPolygon()
             }
 
             QGCButton {
                 _horizontalPadding: 0
                 text:               qsTr("Circular")
-                visible:            !mapPolygon.traceMode
+                //visible:            !mapPolygon.traceMode
+                visible: false
                 onClicked:          _resetCircle()
             }
 
             QGCButton {
                 _horizontalPadding: 0
-                text:               mapPolygon.traceMode ? qsTr("Done Tracing") : qsTr("Trace")
+                text: mapPolygon.traceMode ? qsTr("Finalizar") : qsTr("Iniciar")
                 onClicked: {
                     if (mapPolygon.traceMode) {
                         if (mapPolygon.count < 3) {
                             _restorePreviousVertices()
                         }
                         mapPolygon.traceMode = false
+                        GlobalSignals.showPanels()
                     } else {
                         _saveCurrentVertices()
                         _circleMode = false
                         mapPolygon.traceMode = true
                         mapPolygon.clear();
+                        GlobalSignals.hidePanels()
                     }
+                }
+
+                background: Rectangle {
+                    anchors.fill: parent
+                    color: "#ff4800" // Exemplo de cor de fundo
+                    radius: parent.height / 2 // Ajusta para uma borda mais arredondada
                 }
             }
 
@@ -562,7 +635,8 @@ Item {
                 _horizontalPadding: 0
                 text:               qsTr("Load KML/SHP...")
                 onClicked:          kmlOrSHPLoadDialog.openForLoad()
-                visible:            !mapPolygon.traceMode
+                //visible:            !mapPolygon.traceMode
+                visible: false
             }
         }
     }
@@ -576,9 +650,16 @@ Item {
             preventStealing:    true
             z:                  QGroundControl.zOrderMapItems + 1   // Over item indicators
 
-            onClicked: {
-                if (mouse.button === Qt.LeftButton) {
-                    mapPolygon.appendVertex(mapControl.toCoordinate(Qt.point(mouse.x, mouse.y), false /* clipToViewPort */))
+            onClicked: (mouse) => {
+                if(_utmspEnabled){
+                    if (mouse.button === Qt.LeftButton) {
+                        mapPolygon.appendVertex(mapControl.toCoordinate(Qt.point(mouse.x, mouse.y), false /* clipToViewPort */))
+                    }
+                }
+                else{
+                    if (mouse.button === Qt.LeftButton && _root.interactive) {
+                        mapPolygon.appendVertex(mapControl.toCoordinate(Qt.point(mouse.x, mouse.y), false /* clipToViewPort */))
+                    }
                 }
             }
         }
@@ -599,7 +680,7 @@ Item {
                 height:     width
                 radius:     width / 2
                 color:      "white"
-                opacity:    .90
+                opacity:    interiorOpacity * .90
             }
         }
     }

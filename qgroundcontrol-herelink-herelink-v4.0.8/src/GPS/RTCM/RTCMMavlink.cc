@@ -32,7 +32,7 @@ void RTCMMavlink::RTCMDataUpdate(QByteArray message)
         _bandwidthByteCounter = 0;
     }
 
-    const int maxMessageLength = MAVLINK_MSG_GPS_RTCM_DATA_FIELD_DATA_LEN;
+    const qsizetype maxMessageLength = MAVLINK_MSG_GPS_RTCM_DATA_FIELD_DATA_LEN;
     mavlink_gps_rtcm_data_t mavlinkRtcmData;
     memset(&mavlinkRtcmData, 0, sizeof(mavlink_gps_rtcm_data_t));
 
@@ -65,13 +65,19 @@ void RTCMMavlink::sendMessageToVehicle(const mavlink_gps_rtcm_data_t& msg)
     QmlObjectListModel& vehicles = *_toolbox.multiVehicleManager()->vehicles();
     MAVLinkProtocol* mavlinkProtocol = _toolbox.mavlinkProtocol();
     for (int i = 0; i < vehicles.count(); i++) {
-        Vehicle* vehicle = qobject_cast<Vehicle*>(vehicles[i]);
-        mavlink_message_t message;
-        mavlink_msg_gps_rtcm_data_encode_chan(mavlinkProtocol->getSystemId(),
-                                              mavlinkProtocol->getComponentId(),
-                                              vehicle->priorityLink()->mavlinkChannel(),
-                                              &message,
-                                              &msg);
-        vehicle->sendMessageOnLink(vehicle->priorityLink(), message);
+        Vehicle*                vehicle     = qobject_cast<Vehicle*>(vehicles[i]);
+        WeakLinkInterfacePtr    weakLink    = vehicle->vehicleLinkManager()->primaryLink();
+
+        if (!weakLink.expired()) {
+            mavlink_message_t       message;
+            SharedLinkInterfacePtr  sharedLink = weakLink.lock();
+
+            mavlink_msg_gps_rtcm_data_encode_chan(mavlinkProtocol->getSystemId(),
+                                                  mavlinkProtocol->getComponentId(),
+                                                  sharedLink->mavlinkChannel(),
+                                                  &message,
+                                                  &msg);
+            vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), message);
+        }
     }
 }

@@ -7,120 +7,289 @@
  *
  ****************************************************************************/
 
-import QtQuick          2.11
-import QtQuick.Layouts  1.11
+import QtQuick
+import QtQuick.Layouts
 
-import QGroundControl                       1.0
-import QGroundControl.Controls              1.0
-import QGroundControl.MultiVehicleManager   1.0
-import QGroundControl.ScreenTools           1.0
-import QGroundControl.Palette               1.0
+import QGroundControl
+import QGroundControl.Controls
+import QGroundControl.MultiVehicleManager
+import QGroundControl.ScreenTools
+import QGroundControl.Palette
+import QGroundControl.FactSystem
+import QGroundControl.FactControls
+import MAVLink
 
 //-------------------------------------------------------------------------
 //-- Battery Indicator
 Item {
-    id:             _root
+    id:             control
     anchors.top:    parent.top
     anchors.bottom: parent.bottom
     width:          batteryIndicatorRow.width
 
-    property bool showIndicator: true
+    property bool       showIndicator:      true
+    property bool       waitForParameters:  false   // UI won't show until parameters are ready
+    property Component  expandedPageComponent
 
-    function getBatteryColor() {
-        if(activeVehicle) {
-            if(activeVehicle.battery.percentRemaining.value > 75) {
-                return qgcPal.text
-            }
-            if(activeVehicle.battery.percentRemaining.value > 50) {
-                return qgcPal.colorOrange
-            }
-            if(activeVehicle.battery.percentRemaining.value > 0.1) {
-                return qgcPal.colorRed
-            }
-        }
-        return qgcPal.colorGrey
-    }
-
-    function getBatteryPercentageText() {
-        if(activeVehicle) {
-            if(activeVehicle.battery.percentRemaining.value > 98.9) {
-                return "100%"
-            }
-            if(activeVehicle.battery.percentRemaining.value > 0.1) {
-                return activeVehicle.battery.percentRemaining.valueString + activeVehicle.battery.percentRemaining.units
-            }
-            if(activeVehicle.battery.voltage.value >= 0) {
-                return activeVehicle.battery.voltage.valueString + activeVehicle.battery.voltage.units
-            }
-        }
-        return "N/A"
-    }
-
-    Component {
-        id: batteryInfo
-
-        Rectangle {
-            width:  battCol.width   + ScreenTools.defaultFontPixelWidth  * 3
-            height: battCol.height  + ScreenTools.defaultFontPixelHeight * 2
-            radius: ScreenTools.defaultFontPixelHeight * 0.5
-            color:  qgcPal.window
-            border.color:   qgcPal.text
-
-            Column {
-                id:                 battCol
-                spacing:            ScreenTools.defaultFontPixelHeight * 0.5
-                width:              Math.max(battGrid.width, battLabel.width)
-                anchors.margins:    ScreenTools.defaultFontPixelHeight
-                anchors.centerIn:   parent
-
-                QGCLabel {
-                    id:             battLabel
-                    text:           qsTr("Battery Status")
-                    font.family:    ScreenTools.demiboldFontFamily
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-                GridLayout {
-                    id:                 battGrid
-                    anchors.margins:    ScreenTools.defaultFontPixelHeight
-                    columnSpacing:      ScreenTools.defaultFontPixelWidth
-                    columns:            2
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    QGCLabel { text: qsTr("Voltage:") }
-                    QGCLabel { text: (activeVehicle && activeVehicle.battery.voltage.value !== -1) ? (activeVehicle.battery.voltage.valueString + " " + activeVehicle.battery.voltage.units) : "N/A" }
-                    QGCLabel { text: qsTr("Accumulated Consumption:") }
-                    QGCLabel { text: (activeVehicle && activeVehicle.battery.mahConsumed.value !== -1) ? (activeVehicle.battery.mahConsumed.valueString + " " + activeVehicle.battery.mahConsumed.units) : "N/A" }
-                }
-            }
-        }
-    }
+    property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
+    property Fact   _indicatorDisplay:  QGroundControl.settingsManager.batteryIndicatorSettings.display
+    property bool   _showPercentage:    _indicatorDisplay.rawValue === 0
+    property bool   _showVoltage:       _indicatorDisplay.rawValue === 1
+    property bool   _showBoth:          _indicatorDisplay.rawValue === 2
 
     Row {
         id:             batteryIndicatorRow
         anchors.top:    parent.top
         anchors.bottom: parent.bottom
-        opacity:        (activeVehicle && activeVehicle.battery.voltage.value >= 0) ? 1 : 0.5
-        QGCColoredImage {
-            anchors.top:        parent.top
-            anchors.bottom:     parent.bottom
-            width:              height
-            sourceSize.width:   width
-            source:             "/qmlimages/Battery.svg"
-            fillMode:           Image.PreserveAspectFit
-            color:              qgcPal.text
-        }
-        QGCLabel {
-            text:                   getBatteryPercentageText()
-            font.pointSize:         ScreenTools.mediumFontPointSize
-            color:                  getBatteryColor()
-            anchors.verticalCenter: parent.verticalCenter
+
+        Repeater {
+            model: _activeVehicle ? _activeVehicle.batteries : 0
+
+            Loader {
+                anchors.top:        parent.top
+                anchors.bottom:     parent.bottom
+                sourceComponent:    batteryVisual
+
+                property var battery: object
+            }
         }
     }
     MouseArea {
         anchors.fill:   parent
         onClicked: {
-            mainWindow.showPopUp(_root, batteryInfo)
+            mainWindow.showIndicatorDrawer(batteryPopup, control)
+        }
+    }
+
+    Component {
+        id: batteryPopup
+
+        ToolIndicatorPage {
+            showExpand:         expandedComponent ? true : false
+            waitForParameters:  control.waitForParameters
+            contentComponent:   batteryContentComponent
+            expandedComponent:  batteryExpandedComponent
+        }
+    }
+
+    Component {
+        id: batteryVisual
+
+        Row {
+            anchors.top:    parent.top
+            anchors.bottom: parent.bottom
+
+            function getBatteryColor() {
+                switch (battery.chargeState.rawValue) {
+                case MAVLink.MAV_BATTERY_CHARGE_STATE_OK:
+                    return qgcPal.text
+                case MAVLink.MAV_BATTERY_CHARGE_STATE_LOW:
+                    return qgcPal.colorOrange
+                case MAVLink.MAV_BATTERY_CHARGE_STATE_CRITICAL:
+                case MAVLink.MAV_BATTERY_CHARGE_STATE_EMERGENCY:
+                case MAVLink.MAV_BATTERY_CHARGE_STATE_FAILED:
+                case MAVLink.MAV_BATTERY_CHARGE_STATE_UNHEALTHY:
+                    return qgcPal.colorRed
+                default:
+                    return qgcPal.text
+                }
+            }
+
+            function getBatteryPercentageText() {
+                if (!isNaN(battery.percentRemaining.rawValue)) {
+                    if (battery.percentRemaining.rawValue > 98.9) {
+                        return qsTr("100%")
+                    } else {
+                        return battery.percentRemaining.valueString + battery.percentRemaining.units
+                    }
+                } else if (!isNaN(battery.voltage.rawValue)) {
+                    return battery.voltage.valueString + battery.voltage.units
+                } else if (battery.chargeState.rawValue !== MAVLink.MAV_BATTERY_CHARGE_STATE_UNDEFINED) {
+                    return battery.chargeState.enumStringValue
+                }
+                return qsTr("n/a")
+            }
+
+           function getBatteryVoltageText() {
+                if (!isNaN(battery.voltage.rawValue)) {
+                    return battery.voltage.valueString + battery.voltage.units
+                } else if (battery.chargeState.rawValue !== MAVLink.MAV_BATTERY_CHARGE_STATE_UNDEFINED) {
+                    return battery.chargeState.enumStringValue
+                }
+                return qsTr("n/a")
+            }
+
+            QGCColoredImage {
+                anchors.top:        parent.top
+                anchors.bottom:     parent.bottom
+                width:              height
+                sourceSize.width:   width
+                source:             "/qmlimages/Battery.svg"
+                fillMode:           Image.PreserveAspectFit
+                color:              getBatteryColor()
+            }
+
+           ColumnLayout {
+                id:                     batteryInfoColumn
+                anchors.top:            parent.top
+                anchors.bottom:         parent.bottom
+                spacing:                0
+
+                QGCLabel {
+                    Layout.alignment:       Qt.AlignHCenter
+                    verticalAlignment:      Text.AlignVCenter
+                    color:                  getBatteryColor()
+                    text:                   getBatteryPercentageText()
+                    font.pointSize:         _showBoth ? ScreenTools.defaultFontPointSize : ScreenTools.mediumFontPointSize
+                    visible:                _showBoth || _showPercentage
+                }
+
+                QGCLabel {
+                    Layout.alignment:       Qt.AlignHCenter
+                    font.pointSize:         _showBoth ? ScreenTools.defaultFontPointSize : ScreenTools.mediumFontPointSize
+                    color:                  getBatteryColor()
+                    text:                   getBatteryVoltageText()
+                    visible:                _showBoth || _showVoltage
+                }
+            }
+        }
+    }
+
+    Component {
+        id: batteryValuesAvailableComponent
+
+        QtObject {
+            property bool functionAvailable:        battery.function.rawValue !== MAVLink.MAV_BATTERY_FUNCTION_UNKNOWN
+            property bool temperatureAvailable:     !isNaN(battery.temperature.rawValue)
+            property bool currentAvailable:         !isNaN(battery.current.rawValue)
+            property bool mahConsumedAvailable:     !isNaN(battery.mahConsumed.rawValue)
+            property bool timeRemainingAvailable:   !isNaN(battery.timeRemaining.rawValue)
+            property bool chargeStateAvailable:     battery.chargeState.rawValue !== MAVLink.MAV_BATTERY_CHARGE_STATE_UNDEFINED
+        }
+    }
+
+    Component {
+        id: batteryContentComponent
+
+        ColumnLayout {
+            spacing: ScreenTools.defaultFontPixelHeight / 2
+
+            property var _activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
+
+            Component {
+                id: batteryValuesAvailableComponent
+
+                QtObject {
+                    property bool functionAvailable:        battery.function.rawValue !== MAVLink.MAV_BATTERY_FUNCTION_UNKNOWN
+                    property bool showFunction:             functionAvailable && battery.function.rawValue != MAVLink.MAV_BATTERY_FUNCTION_ALL
+                    property bool temperatureAvailable:     !isNaN(battery.temperature.rawValue)
+                    property bool currentAvailable:         !isNaN(battery.current.rawValue)
+                    property bool mahConsumedAvailable:     !isNaN(battery.mahConsumed.rawValue)
+                    property bool timeRemainingAvailable:   !isNaN(battery.timeRemaining.rawValue)
+                    property bool chargeStateAvailable:     battery.chargeState.rawValue !== MAVLink.MAV_BATTERY_CHARGE_STATE_UNDEFINED
+                }
+            }
+
+            Repeater {
+                model: _activeVehicle ? _activeVehicle.batteries : 0
+
+                SettingsGroupLayout {
+                    heading:        qsTr("Battery %1").arg(_activeVehicle.batteries.length === 1 ? qsTr("Status") : object.id.rawValue)
+                    contentSpacing: 0
+                    showDividers:   false
+
+                    property var batteryValuesAvailable: batteryValuesAvailableLoader.item
+
+                    Loader {
+                        id:                 batteryValuesAvailableLoader
+                        sourceComponent:    batteryValuesAvailableComponent
+
+                        property var battery: object
+                    }
+
+                    LabelledLabel {
+                        label:  qsTr("Charge State")
+                        labelText:  object.chargeState.enumStringValue
+                        visible:    batteryValuesAvailable.chargeStateAvailable
+                    }
+
+                    LabelledLabel {
+                        label:      qsTr("Remaining")
+                        labelText:  object.timeRemainingStr.value
+                        visible:    batteryValuesAvailable.timeRemainingAvailable
+                    }
+
+                    LabelledLabel {
+                        label:      qsTr("Remaining")
+                        labelText:  object.percentRemaining.valueString + " " + object.percentRemaining.units
+                    }
+
+                    LabelledLabel {
+                        label:      qsTr("Voltage")
+                        labelText:  object.voltage.valueString + " " + object.voltage.units
+                    }
+
+                    LabelledLabel {
+                        label:      qsTr("Consumed")
+                        labelText:  object.mahConsumed.valueString + " " + object.mahConsumed.units
+                        visible:    batteryValuesAvailable.mahConsumedAvailable
+                    }
+
+                    LabelledLabel {
+                        label:      qsTr("Temperature")
+                        labelText:  object.temperature.valueString + " " + object.temperature.units
+                        visible:    batteryValuesAvailable.temperatureAvailable
+                    }
+
+                    LabelledLabel {
+                        label:      qsTr("Function")
+                        labelText:  object.function.enumStringValue
+                        visible:    batteryValuesAvailable.showFunction
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: batteryExpandedComponent
+
+        ColumnLayout {
+            spacing: ScreenTools.defaultFontPixelHeight / 2
+
+            FactPanelController { id: controller }
+
+            Loader {
+                sourceComponent: expandedPageComponent
+            }
+
+            SettingsGroupLayout {
+                Layout.fillWidth: true
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    QGCLabel { Layout.fillWidth: true; text: qsTr("Battery Display") }
+                    FactComboBox {
+                        id:             editModeCheckBox
+                        fact:           QGroundControl.settingsManager.batteryIndicatorSettings.display
+                        sizeToContents: true
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    QGCLabel { Layout.fillWidth: true; text: qsTr("Vehicle Power") }
+                    QGCButton {
+                        text: qsTr("Configure")
+                        onClicked: {
+                            mainWindow.showVehicleSetupTool(qsTr("Power"))
+                            mainWindow.closeIndicatorDrawer()
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -7,25 +7,26 @@
  *
  ****************************************************************************/
 
-import QtQuick                      2.11
-import QtQuick.Controls             2.4
-import QtQuick.Layouts              1.11
-import QtQuick.Dialogs              1.3
-import QtQuick.Window               2.2
-import QtCharts                     2.3
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Dialogs
+import QtQuick.Window
+import QtCharts
 
-import QGroundControl               1.0
-import QGroundControl.Palette       1.0
-import QGroundControl.Controls      1.0
-import QGroundControl.Controllers   1.0
-import QGroundControl.ScreenTools   1.0
+import QGroundControl
+import QGroundControl.Palette
+import QGroundControl.Controls
+import QGroundControl.Controllers
+import QGroundControl.ScreenTools
 
 AnalyzePage {
     headerComponent:    headerComponent
     pageComponent:      pageComponent
+    allowPopout:        true
 
-    property var    curVehicle:         controller ? controller.activeVehicle : null
-    property var    curMessage:         curVehicle && curVehicle.messages.count ? curVehicle.messages.get(curVehicle.selected) : null
+    property var    curSystem:          controller ? controller.activeSystem : null
+    property var    curMessage:         curSystem && curSystem.messages.count ? curSystem.messages.get(curSystem.selected) : null
     property int    curCompID:          0
     property real   maxButtonWidth:     0
 
@@ -45,21 +46,39 @@ AnalyzePage {
             }
             RowLayout {
                 Layout.alignment:   Qt.AlignRight
-                visible:            curVehicle ? curVehicle.compIDsStr.length > 2 : false
-                QGCLabel {
-                    text:           qsTr("Component ID:")
+                visible:            curSystem ? controller.systemNames.length > 1 || curSystem.compIDsStr.length > 2 : false
+                QGCComboBox {
+                    id:             systemCombo
+                    model:          controller.systemNames
+                    sizeToContents: true
+                    visible:        controller.systemNames.length > 1
+                    onActivated: (index) =>  { controller.setActiveSystem(controller.systems.get(index).id) }
+
+                    Connections {
+                        target: controller
+                        onActiveSystemChanged: {
+                            for (var systemIndex=0; systemIndex<controller.systems.count; systemIndex++) {
+                                if (controller.systems.get(systemIndex) == curSystem) {
+                                    systemCombo.currentIndex = systemIndex
+                                    curCompID = 0
+                                    cidCombo.currentIndex = 0
+                                    break
+                                }
+                            }
+                        }
+                    }
                 }
                 QGCComboBox {
                     id:             cidCombo
-                    model:          curVehicle ? curVehicle.compIDsStr : []
-                    Layout.minimumWidth: ScreenTools.defaultFontPixelWidth * 10
-                    currentIndex:   0
-                    onActivated: {
-                        if(curVehicle && curVehicle.compIDsStr.length > 1) {
+                    model:          curSystem ? curSystem.compIDsStr : []
+                    sizeToContents: true
+                    visible:        curSystem ? curSystem.compIDsStr.length > 2 : false
+                    onActivated: (index) => {
+                        if(curSystem && curSystem.compIDsStr.length > 1) {
                             if(index < 1)
                                 curCompID = 0
                             else
-                                curCompID = curVehicle.compIDs[index - 1]
+                                curCompID = curSystem.compIDs[index - 1]
                         }
                     }
                 }
@@ -87,15 +106,15 @@ AnalyzePage {
                     anchors.right:  parent.right
                     spacing:        ScreenTools.defaultFontPixelHeight * 0.25
                     Repeater {
-                        model:      curVehicle ? curVehicle.messages : []
+                        model:      curSystem ? curSystem.messages : []
                         delegate:   MAVLinkMessageButton {
                             text:       object.name + (object.fieldSelected ?  " *" : "")
                             compID:     object.cid
-                            checked:    curVehicle ? (curVehicle.selected === index) : false
+                            checked:    curSystem ? (curSystem.selected === index) : false
                             messageHz:  object.messageHz
                             visible:    curCompID === 0 || curCompID === compID
                             onClicked: {
-                                curVehicle.selected = index
+                                curSystem.selected = index
                             }
                             Layout.fillWidth: true
                         }

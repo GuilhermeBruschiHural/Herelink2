@@ -7,15 +7,6 @@
  *
  ****************************************************************************/
 
-
-/**
- * @file
- *   @brief Main executable
- *   @author Lorenz Meier <mavteam@student.ethz.ch>
- *
- */
-
-#include "QGC.h"
 #include <QtGlobal>
 #include <QApplication>
 #include <QIcon>
@@ -26,12 +17,21 @@
 #include <QUdpSocket>
 #include <QtPlugin>
 #include <QStringListModel>
+#include <QQuickStyle>
+#include <QQuickWindow>
+
+#include "QGC.h"
 #include "QGCApplication.h"
 #include "AppMessages.h"
+
+#include <iostream>
 
 #ifndef __mobile__
     #include "QGCSerialPortInfo.h"
     #include "RunGuard.h"
+#ifndef NO_SERIAL_LINK
+    #include <QSerialPort>
+#endif
 #endif
 
 #ifdef UNITTEST_BUILD
@@ -49,7 +49,6 @@
 #include <QtBluetooth/QBluetoothSocket>
 #endif
 
-#include <iostream>
 #include "QGCMapEngine.h"
 
 /* SDL does ugly things to main() */
@@ -82,10 +81,8 @@ int WindowsCrtReportHook(int reportType, char* message, int* returnValue)
 
 #if defined(__android__)
 #include <jni.h>
+#include "AndroidInterface.h"
 #include "JoystickAndroid.h"
-#if defined(QGC_ENABLE_PAIRING)
-#include "PairingManager.h"
-#endif
 #if !defined(NO_SERIAL_LINK)
 #include "qserialport.h"
 #endif
@@ -133,7 +130,7 @@ gst_android_init(JNIEnv* env, jobject context)
 }
 
 //-----------------------------------------------------------------------------
-static const char kJniClassName[] {"org/mavlink/qgroundcontrol/QGCActivity"};
+static const char kJniQGCActivityClassName[] {"org/mavlink/qgroundcontrol/QGCActivity"};
 
 void setNativeMethods(void)
 {
@@ -141,15 +138,15 @@ void setNativeMethods(void)
         {"nativeInit", "()V", reinterpret_cast<void *>(gst_android_init)}
     };
 
-    QAndroidJniEnvironment jniEnv;
+    QJniEnvironment jniEnv;
     if (jniEnv->ExceptionCheck()) {
         jniEnv->ExceptionDescribe();
         jniEnv->ExceptionClear();
     }
 
-    jclass objectClass = jniEnv->FindClass(kJniClassName);
+    jclass objectClass = jniEnv->FindClass(kJniQGCActivityClassName);
     if(!objectClass) {
-        qWarning() << "Couldn't find class:" << kJniClassName;
+        qWarning() << "Couldn't find class:" << kJniQGCActivityClassName;
         return;
     }
 
@@ -172,6 +169,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 {
     Q_UNUSED(reserved);
 
+    qDebug() << "JNI_OnLoa QGC called";
     JNIEnv* env;
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return -1;
@@ -190,29 +188,23 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 
     JoystickAndroid::setNativeMethods();
 
-#if defined(QGC_ENABLE_PAIRING)
-    PairingManager::setNativeMethods();
-#endif
-
     return JNI_VERSION_1_6;
 }
 #endif
 
-//-----------------------------------------------------------------------------
-#ifdef __android__
-#include <QtAndroid>
-bool checkAndroidWritePermission() {
-    QtAndroid::PermissionResult r = QtAndroid::checkPermission("android.permission.WRITE_EXTERNAL_STORAGE");
-    if(r == QtAndroid::PermissionResult::Denied) {
-        QtAndroid::requestPermissionsSync( QStringList() << "android.permission.WRITE_EXTERNAL_STORAGE" );
-        r = QtAndroid::checkPermission("android.permission.WRITE_EXTERNAL_STORAGE");
-        if(r == QtAndroid::PermissionResult::Denied) {
-             return false;
-        }
-   }
-   return true;
+// To shut down QGC on Ctrl+C on Linux
+#ifdef Q_OS_LINUX
+#include <csignal>
+
+void sigHandler(int s)
+{
+    std::signal(s, SIG_DFL);
+    qgcApp()->mainRootWindow()->close();
+    QEvent event{QEvent::Quit};
+    qgcApp()->event(&event);
 }
-#endif
+
+#endif /* Q_OS_LINUX */
 
 //-----------------------------------------------------------------------------
 /**
@@ -226,7 +218,14 @@ bool checkAndroidWritePermission() {
 int main(int argc, char *argv[])
 {
 #ifndef __mobile__
-    RunGuard guard("QGroundControlRunGuardKey");
+    // We make the runguard key different for custom and non custom
+    // builds, so they can be executed together in the same device.
+    // Stable and Daily have same QGC_APPLICATION_NAME so they would
+    // not be able to run at the same time
+    QString runguardString(QGC_APPLICATION_NAME);
+    runguardString.append("RunGuardKey");
+
+    RunGuard guard(runguardString);
     if (!guard.tryToRun()) {
         // QApplication is necessary to use QMessageBox
         QApplication errorApp(argc, argv);
@@ -253,7 +252,7 @@ int main(int argc, char *argv[])
 #ifndef __ios__
     // Prevent Apple's app nap from screwing us over
     // tip: the domain can be cross-checked on the command line with <defaults domains>
-    QProcess::execute("defaults write org.qgroundcontrol.qgroundcontrol NSAppSleepDisabled -bool YES");
+    QProcess::execute("defaults", {"write org.qgroundcontrol.qgroundcontrol NSAppSleepDisabled -bool YES"});
 #endif
 #endif
 
@@ -274,6 +273,11 @@ int main(int argc, char *argv[])
     }
 #endif
 
+#ifdef Q_OS_LINUX
+    std::signal(SIGINT, sigHandler);
+    std::signal(SIGTERM, sigHandler);
+#endif /* Q_OS_LINUX */
+
     // The following calls to qRegisterMetaType are done to silence debug output which warns
     // that we use these types in signals, and without calling qRegisterMetaType we can't queue
     // these signals. In general we don't queue these signals, but we do what the warning says
@@ -291,6 +295,8 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QGCSerialPortInfo>();
 #endif
 #endif
+
+    qRegisterMetaType<Vehicle::MavCmdResultFailureCode_t>("Vehicle::MavCmdResultFailureCode_t");
 
     // We statically link our own QtLocation plugin
 
@@ -339,7 +345,7 @@ int main(int argc, char *argv[])
 #endif
 #endif // QT_DEBUG
 
-    QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    QQuickStyle::setStyle("Basic");
     QGCApplication* app = new QGCApplication(argc, argv, runUnitTests);
     Q_CHECK_PTR(app);
     if(app->isErrorState()) {
@@ -387,7 +393,7 @@ int main(int argc, char *argv[])
     {
 
 #ifdef __android__
-        checkAndroidWritePermission();
+        AndroidInterface::checkStoragePermissions();
 #endif
         if (!app->_initForNormalAppBoot()) {
             return -1;

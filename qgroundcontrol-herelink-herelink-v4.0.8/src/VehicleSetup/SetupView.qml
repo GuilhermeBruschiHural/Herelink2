@@ -7,16 +7,16 @@
  *
  ****************************************************************************/
 
-import QtQuick          2.3
-import QtQuick.Controls 1.2
-import QtQuick.Layouts  1.2
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
 
-import QGroundControl                       1.0
-import QGroundControl.AutoPilotPlugin       1.0
-import QGroundControl.Palette               1.0
-import QGroundControl.Controls              1.0
-import QGroundControl.ScreenTools           1.0
-import QGroundControl.MultiVehicleManager   1.0
+import QGroundControl
+import QGroundControl.AutoPilotPlugin
+import QGroundControl.Palette
+import QGroundControl.Controls
+import QGroundControl.ScreenTools
+import QGroundControl.MultiVehicleManager
 
 Rectangle {
     id:     setupView
@@ -25,7 +25,7 @@ Rectangle {
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
-    ExclusiveGroup { id: setupButtonGroup }
+    ButtonGroup { id: setupButtonGroup }
 
     readonly property real      _defaultTextHeight: ScreenTools.defaultFontPixelHeight
     readonly property real      _defaultTextWidth:  ScreenTools.defaultFontPixelWidth
@@ -39,11 +39,14 @@ Rectangle {
     property bool   _fullParameterVehicleAvailable: QGroundControl.multiVehicleManager.parameterReadyVehicleAvailable && !QGroundControl.multiVehicleManager.activeVehicle.parameterManager.missingParameters
     property var    _corePlugin:                    QGroundControl.corePlugin
 
-    function showSummaryPanel()
-    {
+    function showSummaryPanel() {
         if (mainWindow.preventViewSwitch()) {
             return
         }
+        _showSummaryPanel()
+    }
+
+    function _showSummaryPanel() {
         if (_fullParameterVehicleAvailable) {
             if (QGroundControl.multiVehicleManager.activeVehicle.autopilot.vehicleComponents.length === 0) {
                 panelLoader.setSourceComponent(noComponentsVehicleSummaryComponent)
@@ -55,6 +58,7 @@ Rectangle {
         } else {
             panelLoader.setSourceComponent(disconnectedVehicleSummaryComponent)
         }
+        summaryButton.checked = true
     }
 
     function showPanel(button, qmlSource) {
@@ -80,20 +84,36 @@ Rectangle {
             for(var i = 0; i < componentRepeater.count; i++) {
                 var obj = componentRepeater.itemAt(i);
                 if (obj.text === vehicleComponent.name) {
-                    obj.checked = true;
+                    obj.checked = true
                     break;
                 }
             }
         }
     }
 
-    Component.onCompleted: showSummaryPanel()
+    function showNamedComponentPanel(panelButtonName) {
+        if (mainWindow.preventViewSwitch()) {
+            return
+        }
+        for (var i=0; i<componentRepeater.count; i++) {
+            var panelButton = componentRepeater.itemAt(i)
+            if (panelButton.text === panelButtonName) {
+                showVehicleComponentPanel(panelButton.componentUrl)
+                break;
+            }
+        }
+        if (panelButtonName === parametersButton.text) {
+            parametersButton.clicked()
+        }
+    }
+
+    Component.onCompleted: _showSummaryPanel()
 
     Connections {
         target: QGroundControl.corePlugin
         onShowAdvancedUIChanged: {
             if(!QGroundControl.corePlugin.showAdvancedUI) {
-                showSummaryPanel()
+                _showSummaryPanel()
             }
         }
     }
@@ -108,7 +128,7 @@ Rectangle {
                     //      The summary panel is already showing and the active vehicle goes away
                     //      The active vehicle goes away and we are not on the Firmware panel.
                     summaryButton.checked = true
-                    showSummaryPanel()
+                    _showSummaryPanel()
                 }
             }
         }
@@ -127,7 +147,7 @@ Rectangle {
                 font.pointSize:         ScreenTools.mediumFontPointSize
                 text:                   qsTr("%1 does not currently support setup of your vehicle type. ").arg(QGroundControl.appName) +
                                         "If your vehicle is already configured you can still Fly."
-                onLinkActivated: Qt.openUrlExternally(link)
+                onLinkActivated: (link) => Qt.openUrlExternally(link)
             }
         }
     }
@@ -146,7 +166,7 @@ Rectangle {
                 text:                   qsTr("Vehicle settings and info will display after connecting your vehicle.") +
                                         (ScreenTools.isMobile || !_corePlugin.options.showFirmwareUpgrade ? "" : " Click Firmware on the left to upgrade your vehicle.")
 
-                onLinkActivated: Qt.openUrlExternally(link)
+                onLinkActivated: (link) => Qt.openUrlExternally(link)
             }
         }
     }
@@ -167,7 +187,7 @@ Rectangle {
                 text:                   qsTr("You are currently connected to a vehicle but it did not return the full parameter list. ") +
                                         qsTr("As a result, the full set of vehicle setup options are not available.")
 
-                onLinkActivated: Qt.openUrlExternally(link)
+                onLinkActivated: (link) => Qt.openUrlExternally(link)
             }
         }
     }
@@ -204,34 +224,12 @@ Rectangle {
             id:         buttonColumn
             spacing:    _defaultTextHeight / 2
 
-            QGCLabel {
-                Layout.fillWidth:       true
-                text:                   qsTr("Vehicle Setup")
-                wrapMode:               Text.WordWrap
-                horizontalAlignment:    Text.AlignHCenter
-                visible:                !ScreenTools.isShortScreen
-            }
-
-            Repeater {
-                model:                  _corePlugin ? _corePlugin.settingsPages : []
-                visible:                _corePlugin && _corePlugin.options.combineSettingsAndSetup
-                SubMenuButton {
-                    imageResource:      modelData.icon
-                    setupIndicator:     false
-                    exclusiveGroup:     setupButtonGroup
-                    text:               modelData.title
-                    visible:            _corePlugin && _corePlugin.options.combineSettingsAndSetup
-                    onClicked:          showPanel(this, modelData.url)
-                    Layout.fillWidth:   true
-                }
-            }
-
             SubMenuButton {
                 id:                 summaryButton
                 imageResource:      "/qmlimages/VehicleSummaryIcon.png"
                 setupIndicator:     false
                 checked:            true
-                exclusiveGroup:     setupButtonGroup
+                buttonGroup:     setupButtonGroup
                 text:               qsTr("Summary")
                 Layout.fillWidth:   true
 
@@ -242,7 +240,7 @@ Rectangle {
                 id:                 firmwareButton
                 imageResource:      "/qmlimages/FirmwareUpgradeIcon.png"
                 setupIndicator:     false
-                exclusiveGroup:     setupButtonGroup
+                buttonGroup:     setupButtonGroup
                 visible:            !ScreenTools.isMobile && _corePlugin.options.showFirmwareUpgrade
                 text:               qsTr("Firmware")
                 Layout.fillWidth:   true
@@ -252,8 +250,8 @@ Rectangle {
 
             SubMenuButton {
                 id:                 px4FlowButton
-                exclusiveGroup:     setupButtonGroup
-                visible:            QGroundControl.multiVehicleManager.activeVehicle ? QGroundControl.multiVehicleManager.activeVehicle.priorityLink.isPX4Flow : false
+                buttonGroup:     setupButtonGroup
+                visible:            QGroundControl.multiVehicleManager.activeVehicle ? QGroundControl.multiVehicleManager.activeVehicle.vehicleLinkManager.primaryLinkIsPX4Flow : false
                 setupIndicator:     false
                 text:               qsTr("PX4Flow")
                 Layout.fillWidth:   true
@@ -262,13 +260,18 @@ Rectangle {
 
             SubMenuButton {
                 id:                 joystickButton
+                imageResource:      "/qmlimages/Joystick.png"
                 setupIndicator:     true
-                setupComplete:      true
-                exclusiveGroup:     setupButtonGroup
+                setupComplete:      _activeJoystick ? _activeJoystick.calibrated || _buttonsOnly : false
+                buttonGroup:     setupButtonGroup
                 visible:            _fullParameterVehicleAvailable && joystickManager.joysticks.length !== 0
-                text:               qsTr("Buttons")
+                text:               _forcedToButtonsOnly ? qsTr("Buttons") : qsTr("Joystick")
                 Layout.fillWidth:   true
                 onClicked:          showPanel(this, "JoystickConfig.qml")
+
+                property var    _activeJoystick:        joystickManager.activeJoystick
+                property bool   _buttonsOnly:           _activeJoystick ? _activeJoystick.axisCount == 0 : false
+                property bool   _forcedToButtonsOnly:   !QGroundControl.corePlugin.options.allowJoystickSelection && _buttonsOnly
             }
 
             Repeater {
@@ -279,19 +282,22 @@ Rectangle {
                     imageResource:      modelData.iconResource
                     setupIndicator:     modelData.requiresSetup
                     setupComplete:      modelData.setupComplete
-                    exclusiveGroup:     setupButtonGroup
+                    buttonGroup:     setupButtonGroup
                     text:               modelData.name
                     visible:            modelData.setupSource.toString() !== ""
                     Layout.fillWidth:   true
-                    onClicked:          showVehicleComponentPanel(modelData)
+                    onClicked:          showVehicleComponentPanel(componentUrl)
+
+                    property var componentUrl: modelData
                 }
             }
 
             SubMenuButton {
+                id:                 parametersButton
                 setupIndicator:     false
-                exclusiveGroup:     setupButtonGroup
+                buttonGroup:     setupButtonGroup
                 visible:            QGroundControl.multiVehicleManager.parameterReadyVehicleAvailable &&
-                                    !QGroundControl.multiVehicleManager.activeVehicle.highLatencyLink &&
+                                    !QGroundControl.multiVehicleManager.activeVehicle.usingHighLatencyLink &&
                                     _corePlugin.showAdvancedUI
                 text:               qsTr("Parameters")
                 Layout.fillWidth:   true

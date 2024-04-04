@@ -24,6 +24,8 @@ const char* MissionCommandUIInfo::_friendlyNameJsonKey          = "friendlyName"
 const char* MissionCommandUIInfo::_idJsonKey                    = "id";
 const char* MissionCommandUIInfo::_labelJsonKey                 = "label";
 const char* MissionCommandUIInfo::_mavCmdInfoJsonKey            = "mavCmdInfo";
+const char* MissionCommandUIInfo::_maxJsonKey                   = "max";
+const char* MissionCommandUIInfo::_minJsonKey                   = "min";
 const char* MissionCommandUIInfo::_param1JsonKey                = "param1";
 const char* MissionCommandUIInfo::_param2JsonKey                = "param2";
 const char* MissionCommandUIInfo::_param3JsonKey                = "param3";
@@ -37,12 +39,17 @@ const char* MissionCommandUIInfo::_rawNameJsonKey               = "rawName";
 const char* MissionCommandUIInfo::_standaloneCoordinateJsonKey  = "standaloneCoordinate";
 const char* MissionCommandUIInfo::_specifiesCoordinateJsonKey   = "specifiesCoordinate";
 const char* MissionCommandUIInfo::_specifiesAltitudeOnlyJsonKey = "specifiesAltitudeOnly";
+const char* MissionCommandUIInfo::_isLandCommandJsonKey         = "isLandCommand";
+const char* MissionCommandUIInfo::_isTakeoffCommandJsonKey      = "isTakeoffCommand";
+const char* MissionCommandUIInfo::_isLoiterCommandJsonKey       = "isLoiterCommand";
 const char* MissionCommandUIInfo::_unitsJsonKey                 = "units";
 const char* MissionCommandUIInfo::_commentJsonKey               = "comment";
 const char* MissionCommandUIInfo::_advancedCategory             = "Advanced";
 
 MissionCmdParamInfo::MissionCmdParamInfo(QObject* parent)
     : QObject(parent)
+    , _min   (FactMetaData::minForType(FactMetaData::valueTypeDouble).toDouble())
+    , _max   (FactMetaData::maxForType(FactMetaData::valueTypeDouble).toDouble())
 {
 
 }
@@ -63,6 +70,8 @@ const MissionCmdParamInfo& MissionCmdParamInfo::operator=(const MissionCmdParamI
     _param =            other._param;
     _units =            other._units;
     _nanUnchanged =     other._nanUnchanged;
+    _min =              other._min;
+    _max =              other._max;
 
     return *this;
 }
@@ -164,6 +173,33 @@ bool MissionCommandUIInfo::specifiesAltitudeOnly(void) const
     }
 }
 
+bool MissionCommandUIInfo::isLandCommand(void) const
+{
+    if (_infoMap.contains(_isLandCommandJsonKey)) {
+        return _infoMap[_isLandCommandJsonKey].toBool();
+    } else {
+        return false;
+    }
+}
+
+bool MissionCommandUIInfo::isTakeoffCommand(void) const
+{
+    if (_infoMap.contains(_isTakeoffCommandJsonKey)) {
+        return _infoMap[_isTakeoffCommandJsonKey].toBool();
+    } else {
+        return false;
+    }
+}
+
+bool MissionCommandUIInfo::isLoiterCommand() const
+{
+    if (_infoMap.contains(_isLoiterCommandJsonKey)) {
+        return _infoMap[_isLoiterCommandJsonKey].toBool();
+    } else {
+        return false;
+    }
+}
+
 void MissionCommandUIInfo::_overrideInfo(MissionCommandUIInfo* uiInfo)
 {
     // Override info values
@@ -199,7 +235,7 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
     QStringList allKeys;
     allKeys << _idJsonKey << _rawNameJsonKey << _friendlyNameJsonKey << _descriptionJsonKey << _standaloneCoordinateJsonKey << _specifiesCoordinateJsonKey
             <<_friendlyEditJsonKey << _param1JsonKey << _param2JsonKey << _param3JsonKey << _param4JsonKey << _param5JsonKey << _param6JsonKey << _param7JsonKey
-            << _paramRemoveJsonKey << _categoryJsonKey << _specifiesAltitudeOnlyJsonKey;
+            << _paramRemoveJsonKey << _categoryJsonKey << _specifiesAltitudeOnlyJsonKey << _isLandCommandJsonKey << _isTakeoffCommandJsonKey << _isLoiterCommandJsonKey;
 
     // Look for unknown keys in top level object
     for (const QString& key: jsonObject.keys()) {
@@ -231,7 +267,7 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
     QList<QJsonValue::Type> types;
     types << QJsonValue::Double << QJsonValue::String << QJsonValue::String<< QJsonValue::String << QJsonValue::Bool << QJsonValue::Bool << QJsonValue::Bool
           << QJsonValue::Object << QJsonValue::Object << QJsonValue::Object << QJsonValue::Object << QJsonValue::Object << QJsonValue::Object << QJsonValue::Object
-          << QJsonValue::String << QJsonValue::String << QJsonValue::Bool;
+          << QJsonValue::String << QJsonValue::String << QJsonValue::Bool << QJsonValue::Bool;
     if (!JsonHelper::validateKeyTypes(jsonObject, allKeys, types, internalError)) {
         errorString = _loadErrorString(internalError);
         return false;
@@ -262,6 +298,15 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
     if (jsonObject.contains(_specifiesAltitudeOnlyJsonKey)) {
         _infoMap[_specifiesAltitudeOnlyJsonKey] = jsonObject.value(_specifiesAltitudeOnlyJsonKey).toBool();
     }
+    if (jsonObject.contains(_isLandCommandJsonKey)) {
+        _infoMap[_isLandCommandJsonKey] = jsonObject.value(_isLandCommandJsonKey).toBool();
+    }
+    if (jsonObject.contains(_isTakeoffCommandJsonKey)) {
+        _infoMap[_isTakeoffCommandJsonKey] = jsonObject.value(_isTakeoffCommandJsonKey).toBool();
+    }
+    if (jsonObject.contains(_isLoiterCommandJsonKey)) {
+        _infoMap[_isLoiterCommandJsonKey] = jsonObject.value(_isLoiterCommandJsonKey).toBool();
+    }
     if (jsonObject.contains(_friendlyEditJsonKey)) {
         _infoMap[_friendlyEditJsonKey] = jsonObject.value(_friendlyEditJsonKey).toVariant();
     }
@@ -288,6 +333,15 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
         }
         if (!_infoAvailable(_specifiesCoordinateJsonKey)) {
             _setInfoValue(_specifiesCoordinateJsonKey, false);
+        }
+        if (!_infoAvailable(_isLandCommandJsonKey)) {
+            _setInfoValue(_isLandCommandJsonKey, false);
+        }
+        if (!_infoAvailable(_isTakeoffCommandJsonKey)) {
+            _setInfoValue(_isTakeoffCommandJsonKey, false);
+        }
+        if (!_infoAvailable(_isLoiterCommandJsonKey)) {
+            _setInfoValue(_isLoiterCommandJsonKey, false);
         }
         if (!_infoAvailable(_friendlyEditJsonKey)) {
             _setInfoValue(_friendlyEditJsonKey, false);
@@ -322,7 +376,9 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
             QJsonObject paramObject = jsonObject.value(paramKey).toObject();
 
             QStringList allParamKeys;
-            allParamKeys << _defaultJsonKey << _decimalPlacesJsonKey << _enumStringsJsonKey << _enumValuesJsonKey << _labelJsonKey << _unitsJsonKey << _nanUnchangedJsonKey;
+            allParamKeys << _defaultJsonKey << _decimalPlacesJsonKey << _enumStringsJsonKey << _enumValuesJsonKey
+                         << _labelJsonKey << _unitsJsonKey << _nanUnchangedJsonKey
+                         << _minJsonKey << _maxJsonKey;
 
             // Look for unknown keys in param object
             for (const QString& key: paramObject.keys()) {
@@ -352,10 +408,18 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
 
             paramInfo->_label =         paramObject.value(_labelJsonKey).toString();
             paramInfo->_decimalPlaces = paramObject.value(_decimalPlacesJsonKey).toInt(FactMetaData::kUnknownDecimalPlaces);
-            paramInfo->_enumStrings =   paramObject.value(_enumStringsJsonKey).toString().split(",", QString::SkipEmptyParts);
             paramInfo->_param =         i;
             paramInfo->_units =         paramObject.value(_unitsJsonKey).toString();
             paramInfo->_nanUnchanged =  paramObject.value(_nanUnchangedJsonKey).toBool(false);
+            paramInfo->_enumStrings =   paramObject.value(_enumStringsJsonKey).toString().split(",", Qt::SkipEmptyParts);
+
+            // The min and max values are defaulted correctly already, so only set them if a value is present in the JSON.
+            if (paramObject.value(_minJsonKey).isDouble()) {
+                paramInfo->_min = paramObject.value(_minJsonKey).toDouble();
+            }
+            if (paramObject.value(_maxJsonKey).isDouble()) {
+                paramInfo->_max = paramObject.value(_maxJsonKey).toDouble();
+            }
 
             if (paramObject.contains(_defaultJsonKey)) {
                 if (paramInfo->_nanUnchanged) {
@@ -371,7 +435,7 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
                 paramInfo->_defaultValue = paramInfo->_nanUnchanged ? std::numeric_limits<double>::quiet_NaN() : 0;
             }
 
-            QStringList enumValues = paramObject.value(_enumValuesJsonKey).toString().split(",", QString::SkipEmptyParts);
+            QStringList enumValues = paramObject.value(_enumValuesJsonKey).toString().split(",", Qt::SkipEmptyParts);
             for (const QString &enumValue: enumValues) {
                 bool    convertOk;
                 double  value = enumValue.toDouble(&convertOk);
@@ -385,7 +449,7 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
                 paramInfo->_enumValues << QVariant(value);
             }
             if (paramInfo->_enumValues.count() != paramInfo->_enumStrings.count()) {
-                internalError = QString("enum strings/values count mismatch: %1, %2").arg(paramInfo->_enumStrings.count()).arg(paramInfo->_enumValues.count());
+                internalError = QString("enum strings/values count mismatch, label:'%1' enumStrings:'%2'").arg(paramInfo->_label).arg(paramInfo->_enumStrings.join(","));
                 errorString = _loadErrorString(internalError);
                 return false;
             }
@@ -398,7 +462,9 @@ bool MissionCommandUIInfo::loadJsonInfo(const QJsonObject& jsonObject, bool requ
                                         << paramInfo->_units
                                         << paramInfo->_enumStrings
                                         << paramInfo->_enumValues
-                                        << paramInfo->_nanUnchanged;
+                                        << paramInfo->_nanUnchanged
+                                        << paramInfo->_min
+                                        << paramInfo->_max;
 
             _paramInfoMap[i] = paramInfo;
         }

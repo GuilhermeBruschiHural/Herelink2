@@ -1,15 +1,19 @@
 add_custom_target(UiPreferencesQml
-SOURCES
-    SerialSettings.qml
-    HelpSettings.qml
-    TcpSettings.qml
-    MavlinkSettings.qml
-    DebugWindow.qml
-    UdpSettings.qml
-    LinkSettings.qml
-    MockLink.qml
-    GeneralSettings.qml
-    BluetoothSettings.qml
-    LogReplaySettings.qml
-    MockLinkSettings.qml
+	SOURCES
+        ADSBServerSettings.qml
+		BluetoothSettings.qml
+        FlyViewSettings.qml
+		GeneralSettings.qml
+		HelpSettings.qml
+		LinkSettings.qml
+		LogReplaySettings.qml
+        OfflineMapInfo.qml
+		PX4LogTransferSettings.qml
+        MapSettings.qml
+        PlanViewSettings.qml
+		SerialSettings.qml
+		TcpSettings.qml
+        TelemetrySettings.qml
+		UdpSettings.qml
+        VideoSettings.qml
 )

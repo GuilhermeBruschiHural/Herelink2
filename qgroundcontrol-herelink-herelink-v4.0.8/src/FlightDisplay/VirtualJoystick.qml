@@ -8,28 +8,27 @@
  ****************************************************************************/
 
 
-import QtQuick 2.3
+import QtQuick
 
-import QGroundControl               1.0
-import QGroundControl.ScreenTools   1.0
-import QGroundControl.Controls      1.0
-import QGroundControl.Palette       1.0
-import QGroundControl.Vehicle       1.0
+import QGroundControl
+import QGroundControl.ScreenTools
+import QGroundControl.Controls
+import QGroundControl.Palette
+import QGroundControl.Vehicle
 
 Item {
     // The following properties must be passed in from the Loader
-    // property bool useLightColors
     // property bool autoCenterThrottle - true: throttle will snap back to center when released
 
     property var _activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
 
     Timer {
         interval:   40  // 25Hz, same as real joystick rate
-        running:    QGroundControl.settingsManager.appSettings.virtualJoystick.value && activeVehicle
+        running:    QGroundControl.settingsManager.appSettings.virtualJoystick.value && _activeVehicle
         repeat:     true
         onTriggered: {
-            if (activeVehicle) {
-                activeVehicle.virtualTabletJoystickValue(rightStick.xAxis, -rightStick.yAxis, leftStick.xAxis, leftStick.yAxis)
+            if (_activeVehicle) {
+                _activeVehicle.virtualTabletJoystickValue(rightStick.xAxis, rightStick.yAxis, leftStick.xAxis, leftStick.yAxis)
             }
         }
     }
@@ -42,9 +41,8 @@ Item {
         anchors.bottom:         parent.bottom
         width:                  parent.height
         height:                 parent.height
-        yAxisPositiveRangeOnly: _activeVehicle && !_activeVehicle.rover && !_activeVehicle.sub
+        yAxisPositiveRangeOnly: _activeVehicle && !_activeVehicle.rover
         yAxisReCenter:          autoCenterThrottle
-        lightColors:            useLightColors
     }
 
     JoystickThumbPad {
@@ -55,6 +53,5 @@ Item {
         anchors.bottom:         parent.bottom
         width:                  parent.height
         height:                 parent.height
-        lightColors:            useLightColors
     }
 }

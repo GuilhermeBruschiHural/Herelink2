@@ -15,6 +15,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QtCore5Compat/QRegExp>
 
 QGC_LOGGING_CATEGORY(QGCSerialPortInfoLog, "QGCSerialPortInfoLog")
 
@@ -80,12 +81,12 @@ void QGCSerialPortInfo::_loadJsonData(void)
 
     int fileVersion;
     QString errorString;
-    if (!JsonHelper::validateQGCJsonFile(json,
-                                         _jsonFileTypeValue,    // expected file type
-                                         1,                     // minimum supported version
-                                         1,                     // maximum supported version
-                                         fileVersion,
-                                         errorString)) {
+    if (!JsonHelper::validateInternalQGCJsonFile(json,
+                                                 _jsonFileTypeValue,    // expected file type
+                                                 1,                     // minimum supported version
+                                                 1,                     // maximum supported version
+                                                 fileVersion,
+                                                 errorString)) {
         qWarning() << errorString;
         return;
     }
@@ -238,7 +239,7 @@ bool QGCSerialPortInfo::getBoardInfo(QGCSerialPortInfo::BoardType_t& boardType, 
         for (int i=0; i<_boardDescriptionFallbackList.count(); i++) {
             const BoardRegExpFallback_t& boardFallback = _boardDescriptionFallbackList[i];
 
-            if (description().contains(QRegExp(boardFallback.regExp, Qt::CaseInsensitive))) {
+            if (description().contains(QRegularExpression(boardFallback.regExp, QRegularExpression::CaseInsensitiveOption))) {
 #ifndef __android
                 if (boardFallback.androidOnly) {
                     continue;
@@ -253,7 +254,7 @@ bool QGCSerialPortInfo::getBoardInfo(QGCSerialPortInfo::BoardType_t& boardType, 
         for (int i=0; i<_boardManufacturerFallbackList.count(); i++) {
             const BoardRegExpFallback_t& boardFallback = _boardManufacturerFallbackList[i];
 
-            if (manufacturer().contains(QRegExp(boardFallback.regExp, Qt::CaseInsensitive))) {
+            if (manufacturer().contains(QRegularExpression(boardFallback.regExp, QRegularExpression::CaseInsensitiveOption))) {
 #ifndef __android
                 if (boardFallback.androidOnly) {
                     continue;
@@ -294,10 +295,26 @@ QString QGCSerialPortInfo::_boardTypeToString(BoardType_t boardType)
 
 QList<QGCSerialPortInfo> QGCSerialPortInfo::availablePorts(void)
 {
-    QList<QGCSerialPortInfo>    list;
+    typedef QPair<quint16, quint16> VidPidPair_t;
 
-    for(QSerialPortInfo portInfo: QSerialPortInfo::availablePorts()) {
+    QList<QGCSerialPortInfo>        list;
+    QMap<VidPidPair_t, QStringList> seenSerialNumbers;
+
+    for (QSerialPortInfo portInfo: QSerialPortInfo::availablePorts()) {
         if (!isSystemPort(&portInfo)) {
+            if (portInfo.hasVendorIdentifier() && portInfo.hasProductIdentifier() && !portInfo.serialNumber().isEmpty() && portInfo.serialNumber() != "0") {
+                VidPidPair_t vidPid(portInfo.vendorIdentifier(), portInfo.productIdentifier());
+                if (seenSerialNumbers.contains(vidPid) && seenSerialNumbers[vidPid].contains(portInfo.serialNumber())) {
+                    // Some boards are a composite USB device, with the first port being mavlink and the second something else. We only expose to first mavlink port.
+                    // However internal NMEA devices can present like this, so dont skip anything with NMEA in description
+                    if(!portInfo.description().contains("NMEA"))
+                    {
+                        qCDebug(QGCSerialPortInfoLog) << "Skipping secondary port on same device" << portInfo.portName() << portInfo.vendorIdentifier() << portInfo.productIdentifier() << portInfo.serialNumber();
+                        continue;
+                    }
+                }
+                seenSerialNumbers[vidPid].append(portInfo.serialNumber());
+            }
             list << *((QGCSerialPortInfo*)&portInfo);
         }
     }

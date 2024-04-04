@@ -1,19 +1,23 @@
-add_library(FactControls
+qt_add_library(FactControls STATIC
     FactPanelController.cc
 )
 
 add_custom_target(FactControlsQml
-    SOURCES
-    AltitudeFactTextField.qml  
-    FactCheckBox.qml  
-    FactLabel.qml          
-    FactTextField.qml     
-    FactTextFieldSlider.qml
-    FactBitmask.qml            
-    FactComboBox.qml  
-    FactTextFieldGrid.qml  
-    FactTextFieldRow.qml  
-    FactValueSlider.qml
+	SOURCES
+		FactPanelController.h
+		AltitudeFactTextField.qml
+		FactBitmask.qml
+		FactCheckBox.qml
+		FactComboBox.qml
+		FactLabel.qml
+		FactTextFieldGrid.qml
+		FactTextField.qml
+		FactTextFieldRow.qml
+		FactTextFieldSlider.qml
+		FactValueSlider.qml
+        LabelledFactComboBox.qml
+        LabelledFactTextField.qml
+        LabelledFactSlider.qml
 )
 
 target_link_libraries(FactControls qgc)

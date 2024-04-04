@@ -101,6 +101,9 @@ QGCCameraManager::_mavlinkMessageReceived(const mavlink_message_t& message)
             case MAVLINK_MSG_ID_BATTERY_STATUS:
                 _handleBatteryStatus(message);
                 break;
+            case MAVLINK_MSG_ID_CAMERA_TRACKING_IMAGE_STATUS:
+                _handleTrackingImageStatus(message);
+                break;
         }
     }
 }
@@ -109,8 +112,6 @@ QGCCameraManager::_mavlinkMessageReceived(const mavlink_message_t& message)
 void
 QGCCameraManager::_handleHeartbeat(const mavlink_message_t &message)
 {
-    mavlink_heartbeat_t heartbeat;
-    mavlink_msg_heartbeat_decode(&message, &heartbeat);
     //-- First time hearing from this one?
     QString sCompID = QString::number(message.compid);
     if(!_cameraInfoRequest.contains(sCompID)) {
@@ -130,7 +131,7 @@ QGCCameraManager::_handleHeartbeat(const mavlink_message_t &message)
             } else {
                 //-- Try again. Maybe.
                 if(pInfo->lastHeartbeat.elapsed() > 2000) {
-                    if(pInfo->tryCount > 3) {
+                    if(pInfo->tryCount > 10) {
                         if(!pInfo->gaveUp) {
                             pInfo->gaveUp = true;
                             qWarning() << "Giving up requesting camera info from" << _vehicle->id() << message.compid;
@@ -207,6 +208,7 @@ QGCCameraManager::_findCamera(int id)
 void
 QGCCameraManager::_handleCameraInfo(const mavlink_message_t& message)
 {
+    qCDebug(CameraManagerLog) << "_handleCameraInfo";
     //-- Have we requested it?
     QString sCompID = QString::number(message.compid);
     if(_cameraInfoRequest.contains(sCompID) && !_cameraInfoRequest[sCompID]->infoReceived) {
@@ -368,6 +370,18 @@ QGCCameraManager::_handleBatteryStatus(const mavlink_message_t& message)
         mavlink_battery_status_t batteryStatus;
         mavlink_msg_battery_status_decode(&message, &batteryStatus);
         pCamera->handleBatteryStatus(batteryStatus);
+    }
+}
+
+//-----------------------------------------------------------------------------
+void
+QGCCameraManager::_handleTrackingImageStatus(const mavlink_message_t& message)
+{
+    QGCCameraControl* pCamera = _findCamera(message.compid);
+    if(pCamera) {
+        mavlink_camera_tracking_image_status_t tis;
+        mavlink_msg_camera_tracking_image_status_decode(&message, &tis);
+        pCamera->handleTrackingImageStatus(&tis);
     }
 }
 

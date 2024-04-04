@@ -38,6 +38,7 @@ JoystickManager::~JoystickManager() {
     QMap<QString, Joystick*>::iterator i;
     for (i = _name2JoystickMap.begin(); i != _name2JoystickMap.end(); ++i) {
         qCDebug(JoystickManagerLog) << "Releasing joystick:" << i.key();
+        i.value()->stop();
         delete i.value();
     }
     qDebug() << "Done";
@@ -106,14 +107,14 @@ void JoystickManager::_setActiveJoystickFromSettings(void)
     }
 
     QSettings settings;
-    
+
     settings.beginGroup(_settingsGroup);
     QString name = settings.value(_settingsKeyActiveJoystick).toString();
-    
+
     if (name.isEmpty()) {
         name = _name2JoystickMap.first()->name();
     }
-    
+
     setActiveJoystick(_name2JoystickMap.value(name, _name2JoystickMap.first()));
     settings.setValue(_settingsKeyActiveJoystick, _activeJoystick->name());
 }
@@ -139,9 +140,9 @@ void JoystickManager::setActiveJoystick(Joystick* joystick)
     if (_activeJoystick) {
         _activeJoystick->stopPolling();
     }
-    
+
     _activeJoystick = joystick;
-    
+
     if (_activeJoystick != nullptr) {
         qCDebug(JoystickManagerLog) << "Set active:" << _activeJoystick->name();
 
@@ -156,11 +157,11 @@ void JoystickManager::setActiveJoystick(Joystick* joystick)
 QVariantList JoystickManager::joysticks(void)
 {
     QVariantList list;
-    
+
     for (const QString &name: _name2JoystickMap.keys()) {
         list += QVariant::fromValue(_name2JoystickMap[name]);
     }
-    
+
     return list;
 }
 
@@ -174,14 +175,15 @@ QString JoystickManager::activeJoystickName(void)
     return _activeJoystick ? _activeJoystick->name() : QString();
 }
 
-void JoystickManager::setActiveJoystickName(const QString& name)
+bool JoystickManager::setActiveJoystickName(const QString& name)
 {
-    if (!_name2JoystickMap.contains(name)) {
+    if (_name2JoystickMap.contains(name)) {
+        setActiveJoystick(_name2JoystickMap[name]);
+        return true;
+    } else {
         qCWarning(JoystickManagerLog) << "Set active not in map" << name;
-        return;
+        return false;
     }
-    
-    setActiveJoystick(_name2JoystickMap[name]);
 }
 
 /*

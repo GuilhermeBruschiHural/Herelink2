@@ -85,13 +85,14 @@ protected:
     virtual void    _handleVideoStreamInfo  (const mavlink_message_t& message);
     virtual void    _handleVideoStreamStatus(const mavlink_message_t& message);
     virtual void    _handleBatteryStatus    (const mavlink_message_t& message);
+    virtual void    _handleTrackingImageStatus(const mavlink_message_t& message);
 
 protected:
 
     class CameraStruct : public QObject {
     public:
         CameraStruct(QObject* parent, uint8_t compID_);
-        QTime   lastHeartbeat;
+        QElapsedTimer lastHeartbeat;
         bool    infoReceived = false;
         bool    gaveUp       = false;
         int     tryCount     = 0;
@@ -105,8 +106,8 @@ protected:
     QmlObjectListModel  _cameras;
     QStringList         _cameraLabels;
     int                 _currentCamera      = 0;
-    QTime               _lastZoomChange;
-    QTime               _lastCameraChange;
+    QElapsedTimer       _lastZoomChange;
+    QElapsedTimer       _lastCameraChange;
     QTimer              _cameraTimer;
     QMap<QString, CameraStruct*> _cameraInfoRequest;
 };

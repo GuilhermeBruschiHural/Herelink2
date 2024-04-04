@@ -32,6 +32,7 @@ public:
     Q_PROPERTY(bool     isAndroid           READ isAndroid          CONSTANT)
     Q_PROPERTY(bool     isiOS               READ isiOS              CONSTANT)
     Q_PROPERTY(bool     isMobile            READ isMobile           CONSTANT)
+    Q_PROPERTY(bool     fakeMobile          READ fakeMobile         CONSTANT)
     Q_PROPERTY(bool     isDebug             READ isDebug            CONSTANT)
     Q_PROPERTY(bool     isMacOS             READ isMacOS            CONSTANT)
     Q_PROPERTY(bool     isLinux             READ isLinux            CONSTANT)
@@ -47,10 +48,15 @@ public:
     Q_INVOKABLE int mouseX(void) { return QCursor::pos().x(); }
     Q_INVOKABLE int mouseY(void) { return QCursor::pos().y(); }
 
+    // QFontMetrics::descent for default font
+    Q_INVOKABLE double defaultFontDescent(int pointSize) const;
+
 #if defined(__mobile__)
     bool    isMobile            () const { return true;  }
+    bool    fakeMobile          () const { return false; }
 #else
-    bool    isMobile            () const { return qgcApp()->fakeMobile(); }
+    bool    isMobile            () const { return fakeMobile(); }
+    bool    fakeMobile          () const { return qgcApp()->fakeMobile(); }
 #endif
 
 #if defined (Q_OS_ANDROID)
@@ -103,12 +109,11 @@ public:
     bool isDebug                () { return false; }
 #endif
 
-    bool    hasTouch() const;
-
-    QString  iOSDevice          () const;
-    QString  fixedFontFamily    () const;
-    QString  normalFontFamily   () const;
-    QString  boldFontFamily     () const;
+    bool        hasTouch            () const;
+    QString     iOSDevice           () const;
+    QString     fixedFontFamily     () const;
+    QString     normalFontFamily    () const;
+    QString     boldFontFamily      () const;
 };
 
 #endif

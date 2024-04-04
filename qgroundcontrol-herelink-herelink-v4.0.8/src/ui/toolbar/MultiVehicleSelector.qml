@@ -8,14 +8,14 @@
  ****************************************************************************/
 
 
-import QtQuick                              2.11
-import QtQuick.Controls                     2.4
+import QtQuick
+import QtQuick.Controls
 
-import QGroundControl                       1.0
-import QGroundControl.Controls              1.0
-import QGroundControl.MultiVehicleManager   1.0
-import QGroundControl.ScreenTools           1.0
-import QGroundControl.Palette               1.0
+import QGroundControl
+import QGroundControl.Controls
+import QGroundControl.MultiVehicleManager
+import QGroundControl.ScreenTools
+import QGroundControl.Palette
 
 //-------------------------------------------------------------------------
 //-- Multiple Vehicle Selector
@@ -29,7 +29,7 @@ QGCComboBox {
     property bool showIndicator: _multipleVehicles
 
     property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
-    property bool   _multipleVehicles:  _activeVehicle ? QGroundControl.multiVehicleManager.vehicles.count > 1 : false
+    property bool   _multipleVehicles:  QGroundControl.multiVehicleManager.vehicles.count > 1
     property var    _vehicleModel:      [ ]
 
     Connections {
@@ -37,7 +37,8 @@ QGCComboBox {
         onCountChanged:  _updateVehicleModel()
     }
 
-    Component.onCompleted: _updateVehicleModel()
+    Component.onCompleted:      _updateVehicleModel()
+    on_ActiveVehicleChanged:    _updateVehicleModel()
 
     function _updateVehicleModel() {
         var newCurrentIndex = -1
@@ -57,7 +58,7 @@ QGCComboBox {
         currentIndex = newCurrentIndex
     }
 
-    onActivated: {
+    onActivated: (index) => {
         var vehicleId = textAt(index).split(" ")[1]
         var vehicle = QGroundControl.multiVehicleManager.getVehicleById(vehicleId)
         QGroundControl.multiVehicleManager.activeVehicle = vehicle

@@ -7,13 +7,13 @@
  *
  ****************************************************************************/
 
-import QtQuick          2.3
-import QtQuick.Controls 1.2
-import QtLocation       5.3
-import QtPositioning    5.3
+import QtQuick
+import QtQuick.Controls
+import QtLocation
+import QtPositioning
 
-import QGroundControl               1.0
-import QGroundControl.Controls      1.0
+import QGroundControl
+import QGroundControl.Controls
 
 /// Corridor Scan Complex Mission Item visuals
 TransectStyleMapVisuals {
@@ -25,9 +25,10 @@ TransectStyleMapVisuals {
         id:             mapPolylineVisuals
         mapControl:     map
         mapPolyline:    object.corridorPolyline
-        interactive:    _currentItem
+        interactive:    _currentItem && parent.interactive
         lineWidth:      3
         lineColor:      "#be781c"
         visible:        _currentItem
+        opacity:        parent.opacity
     }
 }

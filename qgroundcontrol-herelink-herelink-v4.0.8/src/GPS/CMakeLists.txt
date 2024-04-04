@@ -1,6 +1,6 @@
 
 
-add_library(gps
+qt_add_library(gps STATIC
 	Drivers/src/ashtech.cpp
 	Drivers/src/gps_helper.cpp
 	Drivers/src/mtk.cpp
@@ -13,11 +13,11 @@ add_library(gps
 )
 
 target_link_libraries(gps
-	Qt5::Core
-	Qt5::Location
-	Qt5::SerialPort
-	Qt5::Svg
-	Qt5::TextToSpeech
+	Qt6::Core
+	Qt6::Location
+	Qt6::SerialPort
+	Qt6::Svg
+	Qt6::TextToSpeech
 
 	qgc
 )

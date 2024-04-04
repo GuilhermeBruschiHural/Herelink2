@@ -12,13 +12,17 @@
 
 #include "MapProvider.h"
 
-MapProvider::MapProvider(const QString &referrer, const QString &imageFormat,
-                         const quint32 averageSize, const QGeoMapType::MapStyle mapType, QObject* parent)
-    : QObject(parent)
-    , _referrer(referrer)
-    , _imageFormat(imageFormat)
-    , _averageSize(averageSize)
-    , _mapType(mapType)
+MapProvider::MapProvider(
+    const QString &referrer, 
+    const QString &imageFormat,
+    const quint32 averageSize, 
+    const QGeoMapType::MapStyle mapStyle, 
+    QObject* parent)
+    : QObject       (parent)
+    , _referrer     (referrer)
+    , _imageFormat  (imageFormat)
+    , _averageSize  (averageSize)
+    , _mapStyle     (mapStyle)
 {
     const QStringList langs = QLocale::system().uiLanguages();
     if (langs.length() > 0) {
@@ -87,10 +91,6 @@ int MapProvider::lat2tileY(const double lat, const int z) const {
         (1.0 -
          log(tan(lat * M_PI / 180.0) + 1.0 / cos(lat * M_PI / 180.0)) / M_PI) /
         2.0 * pow(2.0, z)));
-}
-
-bool MapProvider::_isElevationProvider() const {
-    return false;
 }
 
 QGCTileSet MapProvider::getTileCount(const int zoom, const double topleftLon,

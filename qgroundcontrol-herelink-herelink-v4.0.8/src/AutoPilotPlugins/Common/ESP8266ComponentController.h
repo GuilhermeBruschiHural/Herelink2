@@ -19,7 +19,6 @@
 #include <QTimer>
 
 #include "FactPanelController.h"
-#include "UASInterface.h"
 #include "QGCLoggingCategory.h"
 #include "AutoPilotPlugin.h"
 
@@ -63,7 +62,7 @@ public:
     QStringList     wifiChannels    () { return _channels; }
     QStringList     baudRates       () { return _baudRates; }
     int             baudIndex       ();
-    bool            busy            () { return _waitType != WAIT_FOR_NOTHING; }
+    bool            busy            () const{ return _waitType != WAIT_FOR_NOTHING; }
     Vehicle*        vehicle         () { return _vehicle; }
 
     void        setWifiSSID         (QString id);

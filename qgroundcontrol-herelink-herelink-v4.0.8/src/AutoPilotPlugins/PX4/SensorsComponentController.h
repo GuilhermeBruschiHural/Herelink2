@@ -17,7 +17,6 @@
 #include <QObject>
 #include <QQuickItem>
 
-#include "UASInterface.h"
 #include "FactPanelController.h"
 #include "QGCLoggingCategory.h"
 
@@ -82,6 +81,7 @@ public:
     Q_INVOKABLE void calibrateAirspeed(void);
     Q_INVOKABLE void cancelCalibration(void);
     Q_INVOKABLE bool usingUDPLink(void);
+    Q_INVOKABLE void resetFactoryParameters();
     
 signals:
     void showGyroCalAreaChanged(void);
@@ -96,6 +96,7 @@ signals:
 
 private slots:
     void _handleUASTextMessage(int uasId, int compId, int severity, QString text);
+    void _handleParametersReset(bool success);
     
 private:
     void _startLogCalibration(void);

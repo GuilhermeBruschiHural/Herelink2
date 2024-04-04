@@ -53,7 +53,8 @@
 #include <QFile>
 #include "TerrainTile.h"
 
-int QGeoTiledMapReplyQGC::_requestCount = 0;
+int         QGeoTiledMapReplyQGC::_requestCount = 0;
+QByteArray  QGeoTiledMapReplyQGC::_bingNoTileImage;
 
 //-----------------------------------------------------------------------------
 QGeoTiledMapReplyQGC::QGeoTiledMapReplyQGC(QNetworkAccessManager *networkManager, const QNetworkRequest &request, const QGeoTileSpec &spec, QObject *parent)
@@ -62,6 +63,12 @@ QGeoTiledMapReplyQGC::QGeoTiledMapReplyQGC(QNetworkAccessManager *networkManager
     , _request(request)
     , _networkManager(networkManager)
 {
+    if (_bingNoTileImage.length() == 0) {
+        QFile file(":/res/BingNoTileBytes.dat");
+        file.open(QFile::ReadOnly);
+        _bingNoTileImage = file.readAll();
+        file.close();
+    }
     if(_request.url().isEmpty()) {
         if(!_badMapbox.size()) {
             QFile b(":/res/notile.png");
@@ -73,7 +80,7 @@ QGeoTiledMapReplyQGC::QGeoTiledMapReplyQGC(QNetworkAccessManager *networkManager
         setFinished(true);
         setCached(false);
     } else {
-        QGCFetchTileTask* task = getQGCMapEngine()->createFetchTileTask(getQGCMapEngine()->urlFactory()->getTypeFromId(spec.mapId()), spec.x(), spec.y(), spec.zoom());
+        QGCFetchTileTask* task = getQGCMapEngine()->createFetchTileTask(getQGCMapEngine()->urlFactory()->getProviderTypeFromQtMapId(spec.mapId()), spec.x(), spec.y(), spec.zoom());
         connect(task, &QGCFetchTileTask::tileFetched, this, &QGeoTiledMapReplyQGC::cacheReply);
         connect(task, &QGCMapTask::error, this, &QGeoTiledMapReplyQGC::cacheError);
         getQGCMapEngine()->addTask(task);
@@ -122,24 +129,34 @@ QGeoTiledMapReplyQGC::networkReplyFinished()
         return;
     }
     QByteArray a = _reply->readAll();
-    QString format = getQGCMapEngine()->urlFactory()->getImageFormat(tileSpec().mapId(), a);
+    UrlFactory* urlFactory = getQGCMapEngine()->urlFactory();
+    QString format = urlFactory->getImageFormat(tileSpec().mapId(), a);
     //-- Test for a specialized, elevation data (not map tile)
     if( getQGCMapEngine()->urlFactory()->isElevation(tileSpec().mapId())){
-        a = TerrainTile::serialize(a);
+        a = TerrainTile::serializeFromAirMapJson(a);
         //-- Cache it if valid
         if(!a.isEmpty()) {
             getQGCMapEngine()->cacheTile(
-                getQGCMapEngine()->urlFactory()->getTypeFromId(
+                getQGCMapEngine()->urlFactory()->getProviderTypeFromQtMapId(
                     tileSpec().mapId()),
                 tileSpec().x(), tileSpec().y(), tileSpec().zoom(), a, format);
         }
         emit terrainDone(a, QNetworkReply::NoError);
     } else {
-        //-- This is a map tile. Process and cache it if valid.
-        setMapImageData(a);
-        if(!format.isEmpty()) {
-            setMapImageFormat(format);
-            getQGCMapEngine()->cacheTile(getQGCMapEngine()->urlFactory()->getTypeFromId(tileSpec().mapId()), tileSpec().x(), tileSpec().y(), tileSpec().zoom(), a, format);
+        MapProvider* mapProvider = urlFactory->getMapProviderFromQtMapId(tileSpec().mapId());
+        if (mapProvider && mapProvider->_isBingProvider() && a.size() && _bingNoTileImage.size() && a == _bingNoTileImage) {
+            // Bing doesn't return an error if you request a tile above supported zoom level
+            // It instead returns an image of a missing tile graphic. We need to detect that
+            // and error out so Qt will deal with zooming correctly even if it doesn't have the tile.
+            // This allows us to zoom up to level 23 even though the tiles don't actually exist
+            setError(QGeoTiledMapReply::CommunicationError, "Bing tile above zoom level");
+        } else {
+            //-- This is a map tile. Process and cache it if valid.
+            setMapImageData(a);
+            if(!format.isEmpty()) {
+                setMapImageFormat(format);
+                getQGCMapEngine()->cacheTile(getQGCMapEngine()->urlFactory()->getProviderTypeFromQtMapId(tileSpec().mapId()), tileSpec().x(), tileSpec().y(), tileSpec().zoom(), a, format);
+            }
         }
         setFinished(true);
     }
@@ -193,7 +210,7 @@ QGeoTiledMapReplyQGC::cacheError(QGCMapTask::TaskType type, QString /*errorStrin
         _reply = _networkManager->get(_request);
         _reply->setParent(nullptr);
         connect(_reply, &QNetworkReply::finished, this, &QGeoTiledMapReplyQGC::networkReplyFinished);
-        connect(_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(networkReplyError(QNetworkReply::NetworkError)));
+        connect(_reply, &QNetworkReply::errorOccurred, this, &QGeoTiledMapReplyQGC::networkReplyError);
 #if !defined(__mobile__)
         _networkManager->setProxy(proxy);
 #endif

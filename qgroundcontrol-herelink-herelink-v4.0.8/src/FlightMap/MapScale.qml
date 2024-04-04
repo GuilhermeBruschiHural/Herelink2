@@ -7,13 +7,13 @@
  *
  ****************************************************************************/
 
-import QtQuick          2.3
-import QtQuick.Controls 1.2
+import QtQuick
+import QtQuick.Controls
 
-import QGroundControl                   1.0
-import QGroundControl.Controls          1.0
-import QGroundControl.ScreenTools       1.0
-import QGroundControl.SettingsManager   1.0
+import QGroundControl
+import QGroundControl.Controls
+import QGroundControl.ScreenTools
+import QGroundControl.SettingsManager
 
 /// Map scale control
 Item {
@@ -121,7 +121,7 @@ Item {
             var leftCoord  = mapControl.toCoordinate(Qt.point(0, scale.y), false /* clipToViewPort */)
             var rightCoord = mapControl.toCoordinate(Qt.point(scaleLinePixelLength, scale.y), false /* clipToViewPort */)
             var scaleLineMeters = Math.round(leftCoord.distanceTo(rightCoord))
-            if (QGroundControl.settingsManager.unitsSettings.distanceUnits.value === UnitsSettings.DistanceUnitsFeet) {
+            if (QGroundControl.settingsManager.unitsSettings.horizontalDistanceUnits.value === UnitsSettings.HorizontalDistanceUnitsFeet) {
                 calculateFeetRatio(scaleLineMeters, scaleLinePixelLength)
             } else {
                 calculateMetersRatio(scaleLineMeters, scaleLinePixelLength)
@@ -131,9 +131,9 @@ Item {
 
     Connections {
         target:             mapControl
-        onWidthChanged:     scaleTimer.restart()
-        onHeightChanged:    scaleTimer.restart()
-        onZoomLevelChanged: scaleTimer.restart()
+        function onWidthChanged() {     scaleTimer.restart() }
+        function onHeightChanged() {    scaleTimer.restart() }
+        function onZoomLevelChanged() { scaleTimer.restart() }
     }
 
     Timer {

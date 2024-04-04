@@ -7,38 +7,26 @@ if (ANDROID)
 	)
 endif()
 
-add_library(Joystick
+qt_add_library(Joystick STATIC
 	Joystick.cc
 	JoystickManager.cc
 	JoystickSDL.cc
+	JoystickMavCommand.cc
 	${EXTRA_SRC}
 )
 
 target_link_libraries(Joystick
-        PRIVATE
-            ui
 	PUBLIC
 		qgc
-		ui
 )
 
 target_include_directories(Joystick PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(WIN32)
-        include_directories(${CMAKE_SOURCE_DIR}/libs/sdl2/msvc/include)
-	# Support both 32 and 64 bit builds
-	if (${CMAKE_SIZEOF_VOID_P} MATCHES 8)
-                set(SDL2_LIBRARIES "${CMAKE_SOURCE_DIR}/libs/sdl2/msvc/lib/x64/SDL2.lib;${CMAKE_SOURCE_DIR}/libs/sdl2/msvc/lib/x64/SDL2main.lib")
-	else ()
-                set(SDL2_LIBRARIES "${CMAKE_SOURCE_DIR}/libs/sdl2/msvc/lib/x86/SDL2.lib;${CMAKE_SOURCE_DIR}/libs/sdl2/msvc/lib/x86/SDL2main.lib")
-	endif ()
-
-	string(STRIP "${SDL2_LIBRARIES}" SDL2_LIBRARIES)
-
-	target_link_libraries(Joystick PUBLIC ${SDL2_LIBRARIES})
+	target_link_libraries(Joystick PUBLIC sdl2)
 else()
 	find_package(SDL2 REQUIRED)
-	if (IS_DIRECTORY ${SDL2_INCLUDE_DIRS})
+	if (IS_DIRECTORY "${SDL2_INCLUDE_DIRS}")
 		include_directories(${SDL2_INCLUDE_DIRS})
 		string(STRIP "${SDL2_LIBRARIES}" SDL2_LIBRARIES)
 		target_link_libraries(Joystick PRIVATE ${SDL2_LIBRARIES})

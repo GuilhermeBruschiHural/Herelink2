@@ -18,20 +18,17 @@ APMRoverMode::APMRoverMode(uint32_t mode, bool settable)
 {
     setEnumToStringMapping({
         {MANUAL,         "Manual"},
-        {ACRO,           "Acro"},
+        /*{ACRO,           "Acro"},
         {STEERING,       "Steering"},
         {HOLD,           "Hold"},
         {LOITER,         "Loiter"},
-#if 0
-    // Follow me not ready for Stable
         {FOLLOW,         "Follow"},
-#endif
-        {SIMPLE,         "Simple"},
+        {SIMPLE,         "Simple"},*/
         {AUTO,           "Auto"},
-        {RTL,            "RTL"},
+        /*{RTL,            "RTL"},
         {SMART_RTL,      "Smart RTL"},
         {GUIDED,         "Guided"},
-        {INITIALIZING,   "Initializing"},
+        {INITIALIZING,   "Initializing"},*/
     });
 }
 
@@ -39,19 +36,16 @@ ArduRoverFirmwarePlugin::ArduRoverFirmwarePlugin(void)
 {
     setSupportedModes({
         APMRoverMode(APMRoverMode::MANUAL       ,true),
-        APMRoverMode(APMRoverMode::ACRO         ,true),
-        APMRoverMode(APMRoverMode::STEERING     ,true),
-        APMRoverMode(APMRoverMode::HOLD         ,true),
-        APMRoverMode(APMRoverMode::LOITER       ,true),
-#if 0
-    // Follow me not ready for Stable
-        APMRoverMode(APMRoverMode::FOLLOW       ,true),
-#endif
-        APMRoverMode(APMRoverMode::SIMPLE       ,true),
+        APMRoverMode(APMRoverMode::ACRO         ,false),
+        APMRoverMode(APMRoverMode::STEERING     ,false),
+        APMRoverMode(APMRoverMode::HOLD         ,false),
+        APMRoverMode(APMRoverMode::LOITER       ,false),
+        APMRoverMode(APMRoverMode::FOLLOW       ,false),
+        APMRoverMode(APMRoverMode::SIMPLE       ,false),
         APMRoverMode(APMRoverMode::AUTO         ,true),
-        APMRoverMode(APMRoverMode::RTL          ,true),
-        APMRoverMode(APMRoverMode::SMART_RTL    ,true),
-        APMRoverMode(APMRoverMode::GUIDED       ,true),
+        APMRoverMode(APMRoverMode::RTL          ,false),
+        APMRoverMode(APMRoverMode::SMART_RTL    ,false),
+        APMRoverMode(APMRoverMode::GUIDED       ,false),
         APMRoverMode(APMRoverMode::INITIALIZING ,false),
     });
 
@@ -71,12 +65,9 @@ int ArduRoverFirmwarePlugin::remapParamNameHigestMinorVersionNumber(int majorVer
     return majorVersionNumber == 3 ? 5 : Vehicle::versionNotSetValue;
 }
 
-void ArduRoverFirmwarePlugin::guidedModeChangeAltitude(Vehicle* vehicle, double altitudeChange)
+void ArduRoverFirmwarePlugin::guidedModeChangeAltitude(Vehicle* /*vehicle*/, double /*altitudeChange*/, bool /*pauseVehicle*/)
 {
-    Q_UNUSED(vehicle);
-    Q_UNUSED(altitudeChange);
-
-    qgcApp()->showMessage(QStringLiteral("Change altitude not supported."));
+    qgcApp()->showAppMessage(QStringLiteral("Change altitude not supported."));
 }
 
 bool ArduRoverFirmwarePlugin::supportsNegativeThrust(Vehicle* /*vehicle*/)

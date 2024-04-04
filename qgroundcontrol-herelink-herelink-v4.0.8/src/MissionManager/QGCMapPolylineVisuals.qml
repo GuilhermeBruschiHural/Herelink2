@@ -7,18 +7,18 @@
  *
  ****************************************************************************/
 
-import QtQuick                      2.11
-import QtQuick.Controls             2.4
-import QtLocation                   5.3
-import QtPositioning                5.3
-import QtQuick.Dialogs              1.2
+import QtQuick
+import QtQuick.Controls
+import QtLocation
+import QtPositioning
+import QtQuick.Dialogs
 
-import QGroundControl                   1.0
-import QGroundControl.ScreenTools       1.0
-import QGroundControl.Palette           1.0
-import QGroundControl.Controls          1.0
-import QGroundControl.FlightMap         1.0
-import QGroundControl.ShapeFileHelper   1.0
+import QGroundControl
+import QGroundControl.ScreenTools
+import QGroundControl.Palette
+import QGroundControl.Controls
+import QGroundControl.FlightMap
+import QGroundControl.ShapeFileHelper
 
 /// QGCMapPolyline map visuals
 Item {
@@ -38,7 +38,7 @@ Item {
     property var    _savedVertices:         [ ]
 
     readonly property string _corridorToolsText:    qsTr("Polyline Tools")
-    readonly property string _traceText:            qsTr("Click in the map to add vertices. Click 'Done Tracing' when finished.")
+    readonly property string _traceText:            qsTr("Clique no mapa para adicionar as vertices. Clique em 'Finalizar' quando terminar.")
 
     function _addCommonVisuals() {
         if (_objMgrCommonVisuals.empty) {
@@ -126,11 +126,9 @@ Item {
         id:             kmlLoadDialog
         folder:         QGroundControl.settingsManager.appSettings.missionSavePath
         title:          qsTr("Select KML File")
-        selectExisting: true
         nameFilters:    ShapeFileHelper.fileDialogKMLFilters
-        fileExtension:  QGroundControl.settingsManager.appSettings.kmlFileExtension
 
-        onAcceptedForLoad: {
+        onAcceptedForLoad: (file) => {
             mapPolyline.loadKMLFile(file)
             close()
         }
@@ -154,7 +152,7 @@ Item {
 
         QGCMenuItem {
             text:           qsTr("Edit position..." )
-            onTriggered:    mainWindow.showComponentDialog(editPositionDialog, qsTr("Edit Position"), mainWindow.showDialogDefaultWidth, StandardButton.Cancel)
+            onTriggered:    editPositionDialog.createObject(mainWindow, { coordinate: mapPolyline.path[menu._removeVertexIndex] }).open()
         }
     }
 
@@ -162,8 +160,7 @@ Item {
         id: editPositionDialog
 
         EditPositionDialog {
-            Component.onCompleted: coordinate = mapPolyline.path[menu._removeVertexIndex]
-            onCoordinateChanged:  mapPolyline.adjustVertex(menu._removeVertexIndex,coordinate)
+            onCoordinateChanged: mapPolyline.adjustVertex(menu._removeVertexIndex,coordinate)
         }
     }
 
@@ -175,6 +172,7 @@ Item {
             line.color: lineColor
             path:       mapPolyline.path
             visible:    _root.visible
+            opacity:    _root.opacity
         }
     }
 
@@ -186,6 +184,7 @@ Item {
             anchorPoint.x:  sourceItem.width / 2
             anchorPoint.y:  sourceItem.height / 2
             z:              _zorderSplitHandle
+            opacity:        _root.opacity
 
             property int vertexIndex
 
@@ -204,6 +203,8 @@ Item {
             delegate: Item {
                 property var _splitHandle
                 property var _vertices:     mapPolyline.path
+
+                opacity:    _root.opacity
 
                 function _setHandlePosition() {
                     var nextIndex = index + 1
@@ -238,6 +239,7 @@ Item {
             mapControl: _root.mapControl
             id:         dragArea
             z:          _zorderDragHandle
+            opacity:    _root.opacity
 
             property int polylineVertex
 
@@ -267,6 +269,7 @@ Item {
             anchorPoint.x:  dragHandle.width / 2
             anchorPoint.y:  dragHandle.height / 2
             z:              _zorderDragHandle
+            opacity:        _root.opacity
 
             property int polylineVertex
 
@@ -291,6 +294,8 @@ Item {
 
             delegate: Item {
                 property var _visuals: [ ]
+
+                opacity:    _root.opacity
 
                 Component.onCompleted: {
                     var dragHandle = dragHandleComponent.createObject(mapControl)
@@ -332,7 +337,7 @@ Item {
 
             QGCButton {
                 _horizontalPadding: 0
-                text:               mapPolyline.traceMode ? qsTr("Done Tracing") : qsTr("Trace")
+                text:               mapPolyline.traceMode ? qsTr("Finalizar") : qsTr("Iniciar")
                 onClicked: {
                     if (mapPolyline.traceMode) {
                         if (mapPolyline.count < 2) {
@@ -365,8 +370,8 @@ Item {
             preventStealing:    true
             z:                  QGroundControl.zOrderMapItems + 1   // Over item indicators
 
-            onClicked: {
-                if (mouse.button === Qt.LeftButton) {
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.LeftButton && _root.interactive) {
                     mapPolyline.appendVertex(mapControl.toCoordinate(Qt.point(mouse.x, mouse.y), false /* clipToViewPort */))
                 }
             }

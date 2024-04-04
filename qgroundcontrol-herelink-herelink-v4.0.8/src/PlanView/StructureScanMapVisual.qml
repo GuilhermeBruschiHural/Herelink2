@@ -7,16 +7,16 @@
  *
  ****************************************************************************/
 
-import QtQuick          2.3
-import QtQuick.Controls 1.2
-import QtLocation       5.3
-import QtPositioning    5.3
+import QtQuick
+import QtQuick.Controls
+import QtLocation
+import QtPositioning
 
-import QGroundControl               1.0
-import QGroundControl.ScreenTools   1.0
-import QGroundControl.Palette       1.0
-import QGroundControl.Controls      1.0
-import QGroundControl.FlightMap     1.0
+import QGroundControl
+import QGroundControl.ScreenTools
+import QGroundControl.Palette
+import QGroundControl.Controls
+import QGroundControl.FlightMap
 
 /// Structure Scan Complex Mission Item visuals
 Item {
@@ -27,6 +27,7 @@ Item {
     property var _missionItem:      object
     property var _structurePolygon: object.structurePolygon
     property var _flightPolygon:    object.flightPolygon
+    property bool interactive:      parent.interactive
 
     signal clicked(int sequenceNumber)
 
@@ -43,11 +44,12 @@ Item {
     QGCMapPolygonVisuals {
         mapControl:         map
         mapPolygon:         _structurePolygon
-        interactive:        _missionItem.isCurrentItem
+        interactive:        _missionItem.isCurrentItem && _root.interactive
         borderWidth:        1
         borderColor:        "black"
         interiorColor:      "green"
-        interiorOpacity:    0.25
+        altColor:           "red"
+        interiorOpacity:    0.5 * _root.opacity
     }
 
     QGCMapPolygonVisuals {
@@ -56,6 +58,7 @@ Item {
         interactive:        false
         borderWidth:        2
         borderColor:        "white"
+        interiorOpacity:    _root.opacity
     }
 
     // Entry point
@@ -67,7 +70,7 @@ Item {
             anchorPoint.y:  sourceItem.anchorPointY
             z:              QGroundControl.zOrderMapItems
             coordinate:     _missionItem.coordinate
-            visible:        _missionItem.exitCoordinate.isValid
+            visible:        _missionItem.exitCoordinate.isValid && _root.interactive
 
             sourceItem: MissionItemIndexLabel {
                 index:      _missionItem.sequenceNumber
@@ -87,7 +90,7 @@ Item {
             anchorPoint.y:  sourceItem.anchorPointY
             z:              QGroundControl.zOrderMapItems
             coordinate:     _missionItem.exitCoordinate
-            visible:        _missionItem.exitCoordinate.isValid
+            visible:        _missionItem.exitCoordinate.isValid && _root.interactive
 
             sourceItem: MissionItemIndexLabel {
                 index:      _missionItem.lastSequenceNumber

@@ -32,16 +32,12 @@ class VideoManager;
 class MAVLinkLogManager;
 class QGCCorePlugin;
 class SettingsManager;
-class AirspaceManager;
 class ADSBVehicleManager;
-#if defined(QGC_ENABLE_PAIRING)
-class PairingManager;
+#ifndef QGC_AIRLINK_DISABLED
+class AirLinkManager;
 #endif
-#if defined(QGC_GST_TAISYNC_ENABLED)
-class TaisyncManager;
-#endif
-#if defined(QGC_GST_MICROHARD_ENABLED)
-class MicrohardManager;
+#ifdef CONFIG_UTM_ADAPTER
+class UTMSPManager;
 #endif
 
 /// This is used to manage all of our top level services/tools
@@ -67,19 +63,15 @@ public:
     MAVLinkLogManager*          mavlinkLogManager       () { return _mavlinkLogManager; }
     QGCCorePlugin*              corePlugin              () { return _corePlugin; }
     SettingsManager*            settingsManager         () { return _settingsManager; }
-    AirspaceManager*            airspaceManager         () { return _airspaceManager; }
     ADSBVehicleManager*         adsbVehicleManager      () { return _adsbVehicleManager; }
-#if defined(QGC_ENABLE_PAIRING)
-    PairingManager*             pairingManager          () { return _pairingManager; }
-#endif
 #ifndef __mobile__
     GPSManager*                 gpsManager              () { return _gpsManager; }
 #endif
-#if defined(QGC_GST_TAISYNC_ENABLED)
-    TaisyncManager*             taisyncManager          () { return _taisyncManager; }
+#ifndef QGC_AIRLINK_DISABLED
+    AirLinkManager*              airlinkManager          () { return _airlinkManager; }
 #endif
-#if defined(QGC_GST_MICROHARD_ENABLED)
-    MicrohardManager*           microhardManager        () { return _microhardManager; }
+#ifdef CONFIG_UTM_ADAPTER
+    UTMSPManager*                utmspManager             () { return _utmspManager; }
 #endif
 
 private:
@@ -107,16 +99,13 @@ private:
     MAVLinkLogManager*          _mavlinkLogManager      = nullptr;
     QGCCorePlugin*              _corePlugin             = nullptr;
     SettingsManager*            _settingsManager        = nullptr;
-    AirspaceManager*            _airspaceManager        = nullptr;
     ADSBVehicleManager*         _adsbVehicleManager     = nullptr;
-#if defined(QGC_ENABLE_PAIRING)
-    PairingManager*             _pairingManager         = nullptr;
+#ifndef QGC_AIRLINK_DISABLED
+    AirLinkManager*             _airlinkManager         = nullptr;
 #endif
-#if defined(QGC_GST_TAISYNC_ENABLED)
-    TaisyncManager*             _taisyncManager         = nullptr;
-#endif
-#if defined(QGC_GST_MICROHARD_ENABLED)
-    MicrohardManager*           _microhardManager       = nullptr;
+
+#ifdef CONFIG_UTM_ADAPTER
+    UTMSPManager*                _utmspManager            = nullptr;
 #endif
     friend class QGCApplication;
 };

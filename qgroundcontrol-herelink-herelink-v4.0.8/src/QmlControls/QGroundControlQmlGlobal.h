@@ -7,42 +7,37 @@
  *
  ****************************************************************************/
 
-
-/// @file
-///     @author Don Gagne <don@thegagnes.com>
-
-#ifndef QGroundControlQmlGlobal_H
-#define QGroundControlQmlGlobal_H
+#pragma once
 
 #include "QGCToolbox.h"
 #include "QGCApplication.h"
-#include "LinkManager.h"
 #include "SettingsFact.h"
-#include "FactMetaData.h"
 #include "SimulatedPosition.h"
 #include "QGCLoggingCategory.h"
 #include "AppSettings.h"
-#include "AirspaceManager.h"
 #include "ADSBVehicleManager.h"
-#if defined(QGC_ENABLE_PAIRING)
-#include "PairingManager.h"
-#endif
-#if defined(QGC_GST_TAISYNC_ENABLED)
-#include "TaisyncManager.h"
+#include "QGCPalette.h"
+#include "QmlUnitsConversion.h"
+#ifndef QGC_AIRLINK_DISABLED
+#include "AirLinkManager.h"
 #else
-class TaisyncManager;
+class AirLinkManager;
 #endif
-#if defined(QGC_GST_MICROHARD_ENABLED)
-#include "MicrohardManager.h"
-#else
-class MicrohardManager;
-#endif
-
-#ifdef QT_DEBUG
-#include "MockLink.h"
+#ifdef CONFIG_UTM_ADAPTER
+#include "UTMSPManager.h"
 #endif
 
 class QGCToolbox;
+class LinkManager;
+
+Q_MOC_INCLUDE("LinkManager.h")
+Q_MOC_INCLUDE("QGCMapEngineManager.h")
+Q_MOC_INCLUDE("PositionManager.h")
+Q_MOC_INCLUDE("VideoManager.h")
+Q_MOC_INCLUDE("MAVLinkLogManager.h")
+Q_MOC_INCLUDE("SettingsManager.h")
+Q_MOC_INCLUDE("QGCCorePlugin.h")
+Q_MOC_INCLUDE("MissionCommandTree.h")
 
 class QGroundControlQmlGlobal : public QGCTool
 {
@@ -52,42 +47,48 @@ public:
     QGroundControlQmlGlobal(QGCApplication* app, QGCToolbox* toolbox);
     ~QGroundControlQmlGlobal();
 
-    enum AltitudeMode {
-        AltitudeModeNone,           // Being used as distance value unrelated to ground (for example distance to structure)
-        AltitudeModeRelative,       // MAV_FRAME_GLOBAL_RELATIVE_ALT
-        AltitudeModeAbsolute,       // MAV_FRAME_GLOBAL
-        AltitudeModeAboveTerrain,   // Absolute altitude above terrain calculated from terrain data
-        AltitudeModeTerrainFrame    // MAV_FRAME_GLOBAL_TERRAIN_ALT
+    enum AltMode {
+        AltitudeModeMixed,              // Used by global altitude mode for mission planning
+        AltitudeModeRelative,           // MAV_FRAME_GLOBAL_RELATIVE_ALT
+        AltitudeModeAbsolute,           // MAV_FRAME_GLOBAL
+        AltitudeModeCalcAboveTerrain,   // Absolute altitude above terrain calculated from terrain data
+        AltitudeModeTerrainFrame,       // MAV_FRAME_GLOBAL_TERRAIN_ALT
+        AltitudeModeNone,               // Being used as distance value unrelated to ground (for example distance to structure)
     };
-    Q_ENUM(AltitudeMode)
+    Q_ENUM(AltMode)
 
-    Q_PROPERTY(QString              appName             READ appName                CONSTANT)
-
-    Q_PROPERTY(LinkManager*         linkManager         READ linkManager            CONSTANT)
-    Q_PROPERTY(MultiVehicleManager* multiVehicleManager READ multiVehicleManager    CONSTANT)
-    Q_PROPERTY(QGCMapEngineManager* mapEngineManager    READ mapEngineManager       CONSTANT)
-    Q_PROPERTY(QGCPositionManager*  qgcPositionManger   READ qgcPositionManger      CONSTANT)
-    Q_PROPERTY(MissionCommandTree*  missionCommandTree  READ missionCommandTree     CONSTANT)
-    Q_PROPERTY(VideoManager*        videoManager        READ videoManager           CONSTANT)
-    Q_PROPERTY(MAVLinkLogManager*   mavlinkLogManager   READ mavlinkLogManager      CONSTANT)
-    Q_PROPERTY(QGCCorePlugin*       corePlugin          READ corePlugin             CONSTANT)
-    Q_PROPERTY(SettingsManager*     settingsManager     READ settingsManager        CONSTANT)
-    Q_PROPERTY(FactGroup*           gpsRtk              READ gpsRtkFactGroup        CONSTANT)
-    Q_PROPERTY(AirspaceManager*     airspaceManager     READ airspaceManager        CONSTANT)
-    Q_PROPERTY(ADSBVehicleManager*  adsbVehicleManager  READ adsbVehicleManager     CONSTANT)
-    Q_PROPERTY(bool                 airmapSupported     READ airmapSupported        CONSTANT)
-    Q_PROPERTY(TaisyncManager*      taisyncManager      READ taisyncManager         CONSTANT)
-    Q_PROPERTY(bool                 taisyncSupported    READ taisyncSupported       CONSTANT)
-    Q_PROPERTY(MicrohardManager*    microhardManager    READ microhardManager       CONSTANT)
-    Q_PROPERTY(bool                 microhardSupported  READ microhardSupported     CONSTANT)
-    Q_PROPERTY(bool                 supportsPairing     READ supportsPairing        CONSTANT)
-#if defined(QGC_ENABLE_PAIRING)
-    Q_PROPERTY(PairingManager*      pairingManager      READ pairingManager         CONSTANT)
+    Q_PROPERTY(QString              appName                 READ    appName                 CONSTANT)
+    Q_PROPERTY(LinkManager*         linkManager             READ    linkManager             CONSTANT)
+    Q_PROPERTY(MultiVehicleManager* multiVehicleManager     READ    multiVehicleManager     CONSTANT)
+    Q_PROPERTY(QGCMapEngineManager* mapEngineManager        READ    mapEngineManager        CONSTANT)
+    Q_PROPERTY(QGCPositionManager*  qgcPositionManger       READ    qgcPositionManger       CONSTANT)
+    Q_PROPERTY(VideoManager*        videoManager            READ    videoManager            CONSTANT)
+    Q_PROPERTY(MAVLinkLogManager*   mavlinkLogManager       READ    mavlinkLogManager       CONSTANT)
+    Q_PROPERTY(SettingsManager*     settingsManager         READ    settingsManager         CONSTANT)
+    Q_PROPERTY(ADSBVehicleManager*  adsbVehicleManager      READ    adsbVehicleManager      CONSTANT)
+    Q_PROPERTY(QGCCorePlugin*       corePlugin              READ    corePlugin              CONSTANT)
+    Q_PROPERTY(MissionCommandTree*  missionCommandTree      READ    missionCommandTree      CONSTANT)
+    Q_PROPERTY(FactGroup*           gpsRtk                  READ    gpsRtkFactGroup         CONSTANT)
+#ifndef QGC_AIRLINK_DISABLED
+    Q_PROPERTY(AirLinkManager*      airlinkManager          READ    airlinkManager          CONSTANT)
 #endif
-    Q_PROPERTY(int      supportedFirmwareCount          READ supportedFirmwareCount CONSTANT)
-    Q_PROPERTY(int      supportedVehicleCount           READ supportedVehicleCount  CONSTANT)
-    Q_PROPERTY(bool     px4ProFirmwareSupported         READ px4ProFirmwareSupported CONSTANT)
-    Q_PROPERTY(int      apmFirmwareSupported            READ apmFirmwareSupported   CONSTANT)
+    Q_PROPERTY(bool                 airlinkSupported        READ    airlinkSupported        CONSTANT)
+    Q_PROPERTY(QGCPalette*          globalPalette           MEMBER  _globalPalette          CONSTANT)   ///< This palette will always return enabled colors
+    Q_PROPERTY(QmlUnitsConversion*  unitsConversion         READ    unitsConversion         CONSTANT)
+    Q_PROPERTY(bool                 singleFirmwareSupport   READ    singleFirmwareSupport   CONSTANT)
+    Q_PROPERTY(bool                 singleVehicleSupport    READ    singleVehicleSupport    CONSTANT)
+    Q_PROPERTY(bool                 px4ProFirmwareSupported READ    px4ProFirmwareSupported CONSTANT)
+    Q_PROPERTY(int                  apmFirmwareSupported    READ    apmFirmwareSupported    CONSTANT)
+    Q_PROPERTY(QGeoCoordinate       flightMapPosition       READ    flightMapPosition       WRITE setFlightMapPosition  NOTIFY flightMapPositionChanged)
+    Q_PROPERTY(double               flightMapZoom           READ    flightMapZoom           WRITE setFlightMapZoom      NOTIFY flightMapZoomChanged)
+    Q_PROPERTY(double               flightMapInitialZoom    MEMBER  _flightMapInitialZoom   CONSTANT)   ///< Zoom level to use when either gcs or vehicle shows up for first time
+
+    Q_PROPERTY(QString  parameterFileExtension  READ parameterFileExtension CONSTANT)
+    Q_PROPERTY(QString  missionFileExtension    READ missionFileExtension   CONSTANT)
+    Q_PROPERTY(QString  telemetryFileExtension  READ telemetryFileExtension CONSTANT)
+
+    Q_PROPERTY(QString qgcVersion       READ qgcVersion         CONSTANT)
+    Q_PROPERTY(bool    skipSetupPage    READ skipSetupPage      WRITE setSkipSetupPage NOTIFY skipSetupPageChanged)
 
     Q_PROPERTY(qreal zOrderTopMost              READ zOrderTopMost              CONSTANT) ///< z order for top most items, toolbar, main window sub view
     Q_PROPERTY(qreal zOrderWidgets              READ zOrderWidgets              CONSTANT) ///< z order value to widgets, for example: zoom controls, hud widgetss
@@ -96,7 +97,6 @@ public:
     Q_PROPERTY(qreal zOrderWaypointIndicators   READ zOrderWaypointIndicators   CONSTANT)
     Q_PROPERTY(qreal zOrderTrajectoryLines      READ zOrderTrajectoryLines      CONSTANT)
     Q_PROPERTY(qreal zOrderWaypointLines        READ zOrderWaypointLines        CONSTANT)
-
     //-------------------------------------------------------------------------
     // MavLink Protocol
     Q_PROPERTY(bool     isVersionCheckEnabled   READ isVersionCheckEnabled      WRITE setIsVersionCheckEnabled      NOTIFY isVersionCheckEnabledChanged)
@@ -104,20 +104,17 @@ public:
     Q_PROPERTY(bool     hasAPMSupport           READ hasAPMSupport              CONSTANT)
     Q_PROPERTY(bool     hasMAVLinkInspector     READ hasMAVLinkInspector        CONSTANT)
 
-    Q_PROPERTY(QGeoCoordinate flightMapPosition     READ flightMapPosition      WRITE setFlightMapPosition          NOTIFY flightMapPositionChanged)
-    Q_PROPERTY(double         flightMapZoom         READ flightMapZoom          WRITE setFlightMapZoom              NOTIFY flightMapZoomChanged)
-    Q_PROPERTY(double         flightMapInitialZoom  MEMBER _flightMapInitialZoom                                    CONSTANT)                               ///< Zoom level to use when either gcs or vehicle shows up for first time
 
-    Q_PROPERTY(QString  parameterFileExtension  READ parameterFileExtension CONSTANT)
-    Q_PROPERTY(QString  missionFileExtension    READ missionFileExtension   CONSTANT)
-    Q_PROPERTY(QString  telemetryFileExtension  READ telemetryFileExtension CONSTANT)
+    //-------------------------------------------------------------------------
+    // Elevation Provider
+    Q_PROPERTY(QString  elevationProviderName           READ elevationProviderName              CONSTANT)
+    Q_PROPERTY(QString  elevationProviderNotice         READ elevationProviderNotice            CONSTANT)
 
-    /// Returns the string for distance units which has configued by user
-    Q_PROPERTY(QString appSettingsDistanceUnitsString READ appSettingsDistanceUnitsString CONSTANT)
-    Q_PROPERTY(QString appSettingsAreaUnitsString READ appSettingsAreaUnitsString CONSTANT)
+    Q_PROPERTY(bool              utmspSupported           READ    utmspSupported              CONSTANT)
 
-    Q_PROPERTY(QString qgcVersion       READ qgcVersion         CONSTANT)
-    Q_PROPERTY(bool    skipSetupPage    READ skipSetupPage      WRITE setSkipSetupPage NOTIFY skipSetupPageChanged)
+#ifdef CONFIG_UTM_ADAPTER
+    Q_PROPERTY(UTMSPManager*     utmspManager             READ    utmspManager                CONSTANT)
+#endif
 
     Q_INVOKABLE void    saveGlobalSetting       (const QString& key, const QString& value);
     Q_INVOKABLE QString loadGlobalSetting       (const QString& key, const QString& defaultValue);
@@ -135,22 +132,6 @@ public:
     Q_INVOKABLE void    startAPMArduRoverMockLink   (bool sendStatusText);
     Q_INVOKABLE void    stopOneMockLink             (void);
 
-    /// Converts from meters to the user specified distance unit
-    Q_INVOKABLE QVariant metersToAppSettingsDistanceUnits(const QVariant& meters) const { return FactMetaData::metersToAppSettingsDistanceUnits(meters); }
-
-    /// Converts from user specified distance unit to meters
-    Q_INVOKABLE QVariant appSettingsDistanceUnitsToMeters(const QVariant& distance) const { return FactMetaData::appSettingsDistanceUnitsToMeters(distance); }
-
-    QString appSettingsDistanceUnitsString(void) const { return FactMetaData::appSettingsDistanceUnitsString(); }
-
-    /// Converts from square meters to the user specified area unit
-    Q_INVOKABLE QVariant squareMetersToAppSettingsAreaUnits(const QVariant& meters) const { return FactMetaData::squareMetersToAppSettingsAreaUnits(meters); }
-
-    /// Converts from user specified area unit to square meters
-    Q_INVOKABLE QVariant appSettingsAreaUnitsToSquareMeters(const QVariant& area) const { return FactMetaData::appSettingsAreaUnitsToSquareMeters(area); }
-
-    QString appSettingsAreaUnitsString(void) const { return FactMetaData::appSettingsAreaUnitsString(); }
-
     /// Returns the list of available logging category names.
     Q_INVOKABLE QStringList loggingCategories(void) const { return QGCLoggingCategoryRegister::instance()->registeredCategories(); }
 
@@ -165,8 +146,8 @@ public:
 
     Q_INVOKABLE bool linesIntersect(QPointF xLine1, QPointF yLine1, QPointF xLine2, QPointF yLine2);
 
-    Q_INVOKABLE double degreesToRadians(double degrees) { return qDegreesToRadians(degrees); }
-    Q_INVOKABLE double radiansToDegrees(double radians) { return qRadiansToDegrees(radians); }
+    Q_INVOKABLE QString altitudeModeExtraUnits(AltMode altMode);        ///< String shown in the FactTextField.extraUnits ui
+    Q_INVOKABLE QString altitudeModeShortDescription(AltMode altMode);  ///< String shown when a user needs to select an altitude mode
 
     // Property accesors
 
@@ -181,29 +162,20 @@ public:
     QGCCorePlugin*          corePlugin          ()  { return _corePlugin; }
     SettingsManager*        settingsManager     ()  { return _settingsManager; }
     FactGroup*              gpsRtkFactGroup     ()  { return _gpsRtkFactGroup; }
-    AirspaceManager*        airspaceManager     ()  { return _airspaceManager; }
     ADSBVehicleManager*     adsbVehicleManager  ()  { return _adsbVehicleManager; }
-#if defined(QGC_ENABLE_PAIRING)
-    bool                    supportsPairing     ()  { return true; }
-    PairingManager*         pairingManager      ()  { return _pairingManager; }
-#else
-    bool                    supportsPairing     ()  { return false; }
-#endif
+    QmlUnitsConversion*     unitsConversion     ()  { return &_unitsConversion; }
     static QGeoCoordinate   flightMapPosition   ()  { return _coord; }
     static double           flightMapZoom       ()  { return _zoom; }
 
-    TaisyncManager*         taisyncManager      ()  { return _taisyncManager; }
-#if defined(QGC_GST_TAISYNC_ENABLED)
-    bool                    taisyncSupported    ()  { return true; }
+    AirLinkManager*         airlinkManager      ()  { return _airlinkManager; }
+#ifndef QGC_AIRLINK_DISABLED
+    bool                    airlinkSupported    ()  { return true; }
 #else
-    bool                    taisyncSupported    () { return false; }
+    bool                    airlinkSupported    () { return false; }
 #endif
 
-    MicrohardManager*       microhardManager    () { return _microhardManager; }
-#if defined(QGC_GST_TAISYNC_ENABLED)
-    bool                    microhardSupported  () { return true; }
-#else
-    bool                    microhardSupported  () { return false; }
+#ifdef CONFIG_UTM_ADAPTER
+    UTMSPManager*            utmspManager         ()  {return _utmspManager;}
 #endif
 
     qreal zOrderTopMost             () { return 1000; }
@@ -222,17 +194,20 @@ public:
     bool    hasAPMSupport           () { return true; }
 #endif
 
-#if defined(QGC_ENABLE_MAVLINK_INSPECTOR)
-    bool    hasMAVLinkInspector     () { return true; }
-#else
+#if defined(QGC_DISABLE_MAVLINK_INSPECTOR)
     bool    hasMAVLinkInspector     () { return false; }
+#else
+    bool    hasMAVLinkInspector     () { return true; }
 #endif
 
-    int     supportedFirmwareCount  ();
-    int     supportedVehicleCount   ();
+    QString elevationProviderName   () { return UrlFactory::kCopernicusElevationProviderKey; }
+    QString elevationProviderNotice () { return UrlFactory::kCopernicusElevationProviderNotice; }
+
+    bool    singleFirmwareSupport   ();
+    bool    singleVehicleSupport    ();
     bool    px4ProFirmwareSupported ();
     bool    apmFirmwareSupported    ();
-    bool    skipSetupPage           () { return _skipSetupPage; }
+    bool    skipSetupPage           () const{ return _skipSetupPage; }
     void    setSkipSetupPage        (bool skip);
 
     void    setIsVersionCheckEnabled    (bool enable);
@@ -246,10 +221,10 @@ public:
 
     QString qgcVersion              (void) const;
 
-#if defined(QGC_AIRMAP_ENABLED)
-    bool    airmapSupported() { return true; }
+#ifdef CONFIG_UTM_ADAPTER
+    bool    utmspSupported() { return true; }
 #else
-    bool    airmapSupported() { return false; }
+    bool    utmspSupported() { return false; }
 #endif
 
     // Overrides from QGCTool
@@ -276,15 +251,16 @@ private:
     FirmwarePluginManager*  _firmwarePluginManager  = nullptr;
     SettingsManager*        _settingsManager        = nullptr;
     FactGroup*              _gpsRtkFactGroup        = nullptr;
-    AirspaceManager*        _airspaceManager        = nullptr;
-    TaisyncManager*         _taisyncManager         = nullptr;
-    MicrohardManager*       _microhardManager       = nullptr;
+    AirLinkManager*         _airlinkManager         = nullptr;
     ADSBVehicleManager*     _adsbVehicleManager     = nullptr;
-#if defined(QGC_ENABLE_PAIRING)
-    PairingManager*         _pairingManager         = nullptr;
+    QGCPalette*             _globalPalette          = nullptr;
+    QmlUnitsConversion      _unitsConversion;
+#ifdef CONFIG_UTM_ADAPTER
+    UTMSPManager*            _utmspManager;
 #endif
 
     bool                    _skipSetupPage          = false;
+    QStringList             _altitudeModeEnumString;
 
     static const char* _flightMapPositionSettingsGroup;
     static const char* _flightMapPositionLatitudeSettingsKey;
@@ -293,6 +269,5 @@ private:
 
     static QGeoCoordinate   _coord;
     static double           _zoom;
+    QTimer                  _flightMapPositionSettledTimer;
 };
-
-#endif

@@ -15,7 +15,6 @@ add_custom_target(PlanViewQml
 		MissionSettingsEditor.qml
 		PlanEditToolbar.qml
 		PlanToolBarIndicators.qml
-		PlanToolBar.qml
 		PlanView.qml
 		RallyPointEditorHeader.qml
 		RallyPointItemEditor.qml
@@ -26,7 +25,13 @@ add_custom_target(PlanViewQml
 		StructureScanMapVisual.qml
 		SurveyItemEditor.qml
 		SurveyMapVisual.qml
+		TakeoffItemMapVisual.qml
+		TerrainStatus.qml
 		TransectStyleComplexItemStats.qml
+		TransectStyleComplexItemTabBar.qml
+		TransectStyleComplexItemTerrainFollow.qml
 		TransectStyleMapVisuals.qml
+		VTOLLandingPatternEditor.qml
+		VTOLLandingPatternMapVisual.qml
 )
 

@@ -1,24 +1,21 @@
 
 add_subdirectory(FactControls)
 
-set(EXTRA_SRC)
-if(BUILD_TESTING)
-	list(APPEND EXTRA_SRC
-		FactSystemTestBase.cc
-		FactSystemTestGeneric.cc
-		FactSystemTestPX4.cc
-		ParameterManagerTest.cc
-	)
-endif()
-
-add_library(FactSystem
+qt_add_library(FactSystem STATIC
 	Fact.cc
 	FactGroup.cc
+	FactGroup.h
+	Fact.h
 	FactMetaData.cc
+	FactMetaData.h
 	FactSystem.cc
+	FactSystem.h
 	FactValueSliderListModel.cc
+	FactValueSliderListModel.h
 	ParameterManager.cc
+	ParameterManager.h
 	SettingsFact.cc
+	SettingsFact.h
 
 	${EXTRA_SRC}
 )

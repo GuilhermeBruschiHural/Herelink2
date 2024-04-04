@@ -1,34 +1,110 @@
 
-set(EXTRA_SRC)
-if(BUILD_TESTING)
-	list(APPEND EXTRA_SRC
-		SendMavCommandTest.cc
-		SendMavCommandTest.h
-	)
-endif()
+add_subdirectory(Actuators)
 
-add_library(Vehicle
+qt_add_library(Vehicle STATIC
+	Autotune.cpp
+	Autotune.h
+	CompInfo.cc
+	CompInfo.h
+	CompInfoActuators.cc
+	CompInfoActuators.h
+	CompInfoEvents.cc
+	CompInfoEvents.h
+	CompInfoParam.cc
+	CompInfoParam.h
+	CompInfoGeneral.cc
+	CompInfoGeneral.h
+	ComponentInformationCache.cc
+	ComponentInformationCache.h
+	ComponentInformationManager.cc
+	ComponentInformationManager.h
+	ComponentInformationTranslation.cc
+	ComponentInformationTranslation.h
+	EventHandler.cc
+	EventHandler.h
+	FTPManager.cc
+	FTPManager.h
 	GPSRTKFactGroup.cc
 	GPSRTKFactGroup.h
+	HealthAndArmingCheckReport.cc
+	HealthAndArmingCheckReport.h
+	ImageProtocolManager.cc
+	ImageProtocolManager.h
+	InitialConnectStateMachine.cc
+	InitialConnectStateMachine.h
 	MAVLinkLogManager.cc
 	MAVLinkLogManager.h
+	MAVLinkStreamConfig.cc
+	MAVLinkStreamConfig.h
 	MultiVehicleManager.cc
 	MultiVehicleManager.h
+	StateMachine.cc
+	StateMachine.h
+	StandardModes.cc
+	StandardModes.h
+	SysStatusSensorInfo.cc
+	SysStatusSensorInfo.h
+	TerrainFactGroup.cc
+	TerrainFactGroup.h
+	TerrainProtocolHandler.cc
+	TerrainProtocolHandler.h
 	TrajectoryPoints.cc
 	TrajectoryPoints.h
+	VehicleBatteryFactGroup.cc
+	VehicleBatteryFactGroup.h
 	Vehicle.cc
+	VehicleClockFactGroup.cc
+	VehicleClockFactGroup.h
+	VehicleDistanceSensorFactGroup.cc
+	VehicleDistanceSensorFactGroup.h
+	VehicleEFIFactGroup.cc
+	VehicleEFIFactGroup.h
+	VehicleEscStatusFactGroup.cc
+	VehicleEscStatusFactGroup.h
+	VehicleEstimatorStatusFactGroup.cc
+	VehicleEstimatorStatusFactGroup.h
+	VehicleGeneratorFactGroup.cc
+	VehicleGeneratorFactGroup.h
+	VehicleLocalPositionFactGroup.cc
+	VehicleLocalPositionFactGroup.h
+	VehicleLocalPositionSetpointFactGroup.cc
+	VehicleLocalPositionSetpointFactGroup.h
+	VehicleGPSFactGroup.cc
+	VehicleGPSFactGroup.h
+	VehicleGPS2FactGroup.cc
+	VehicleGPS2FactGroup.h
 	Vehicle.h
+	VehicleLinkManager.cc
+	VehicleLinkManager.h
 	VehicleObjectAvoidance.cc
 	VehicleObjectAvoidance.h
-
-	${EXTRA_SRC}
+	VehicleSetpointFactGroup.cc
+	VehicleSetpointFactGroup.h
+	VehicleTemperatureFactGroup.cc
+	VehicleTemperatureFactGroup.h
+	VehicleVibrationFactGroup.cc
+	VehicleVibrationFactGroup.h
+	VehicleWindFactGroup.cc
+	VehicleWindFactGroup.h
+        VehicleHygrometerFactGroup.cc
+        VehicleHygrometerFactGroup.h
+	RemoteIDManager.h
+	RemoteIDManager.cc
 )
 
 target_link_libraries(Vehicle
 	PRIVATE
-		ui
+		Actuators
+		compression
+		libevents_generated
+		libevents_parser
+		libevents_health_and_arming_checks
 	PUBLIC
 		qgc
 )
 
-target_include_directories(Vehicle INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(Vehicle
+	PUBLIC
+		${CMAKE_CURRENT_SOURCE_DIR}
+		${CMAKE_SOURCE_DIR}/libs/libevents
+)

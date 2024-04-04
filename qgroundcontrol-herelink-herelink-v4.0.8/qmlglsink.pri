@@ -1,8 +1,10 @@
-# FIXME: will be fixed after converting qmlglsink into .pro#static lib
-QMAKE_CXXFLAGS_WARN_ON =
-
 LinuxBuild {
-    DEFINES += HAVE_QT_X11 HAVE_QT_EGLFS HAVE_QT_WAYLAND
+    UseWayland: {
+        DEFINES += HAVE_QT_WAYLAND
+    } else {
+        DEFINES += HAVE_QT_X11
+    }
+    DEFINES += HAVE_QT_EGLFS HAVE_QT_QPA_HEADER
 } else:MacBuild {
     DEFINES += HAVE_QT_MAC
 } else:iOSBuild {
@@ -15,19 +17,17 @@ LinuxBuild {
 }
 
 SOURCES += \
-    libs/gst-plugins-good/ext/qt/gstplugin.cc \
-    libs/gst-plugins-good/ext/qt/gstqtglutility.cc \
-    libs/gst-plugins-good/ext/qt/gstqsgtexture.cc \
-    libs/gst-plugins-good/ext/qt/gstqtsink.cc \
-    libs/gst-plugins-good/ext/qt/gstqtsrc.cc \
-    libs/gst-plugins-good/ext/qt/qtwindow.cc \
-    libs/gst-plugins-good/ext/qt/qtitem.cc
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstplugin.cc \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqml6glsink.cc \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqsg6glnode.cc \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqt6element.cc \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqt6glutility.cc \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/qt6glitem.cc 
 
 HEADERS += \
-    libs/gst-plugins-good/ext/qt/gstqsgtexture.h \
-    libs/gst-plugins-good/ext/qt/gstqtgl.h \
-    libs/gst-plugins-good/ext/qt/gstqtglutility.h \
-    libs/gst-plugins-good/ext/qt/gstqtsink.h \
-    libs/gst-plugins-good/ext/qt/gstqtsrc.h \
-    libs/gst-plugins-good/ext/qt/qtwindow.h \
-    libs/gst-plugins-good/ext/qt/qtitem.h
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqml6glsink.h \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqsg6glnode.h \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqt6elements.h \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqt6gl.h \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/gstqt6glutility.h \
+    libs/qmlglsink/gst-plugins-good/ext/qt6/qt6glitem.h
